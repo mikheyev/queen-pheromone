@@ -1,3 +1,5 @@
-# Analyzing gene expression induced by queen pheromone in ants and bees
+# R-based analysis of queen pheromone data
 
-This project has two branches: [bioinformatics](../bioinformatics/README.md) and [stats](../stats/README.md). The former contains code run on OIST's Sango cluster, starting from raw reads. The latter contains R-based analyses run locally, and the Kallisto gene expression data.
+`data/orthology` results from reciprocal best blast
+
+
