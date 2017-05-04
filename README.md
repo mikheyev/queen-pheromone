@@ -34,6 +34,8 @@ First, we have to generate proteins with the same names as the genes
 	cat ../data/assembly/trinity_lf/Trinity.fasta.transdecoder.pep |sed 's/_i.*//' | tr -d '*' > lf_prot.fa
 
 
+	for i in  *.txt; do cat $i | awk -v OFS=, '{print $1"|"$2,$(NF-1)}' | sort -t , -k1,2 -g | tr "|" "," |  awk -F, '!x[$1$2]++' > `basename $i txt`csv; done
+
 ### Generating tables for analysis
 
 #### Gene, transcript and protein IDs
