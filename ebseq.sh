@@ -40,9 +40,10 @@ elif [ "$species" == "ln" ]; then
 
 fi
 
-$rsem/rsem-generate-data-matrix $samples > $refdir/$species.genes.matrix
+$rsem/rsem-generate-data-matrix `echo $samples | sed 's/isoforms/genes/g'` > $refdir/$species.genes.matrix
 $rsem/rsem-run-ebseq $refdir/$species.genes.matrix $conditions $refdir/$species".genes.ebseq"
 $rsem/rsem-control-fdr $refdir/$species".genes.ebseq" .05 $refdir/$species".genes.padj.ebseq"
 
 $rsem/rsem-run-ebseq --ngvector ./ref/$species.ngvec $refdir/$species.matrix $conditions $refdir/$species".ebseq"
 $rsem/rsem-control-fdr $refdir/$species".ebseq" .05 $refdir/$species".padj.ebseq"
+
