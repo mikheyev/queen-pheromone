@@ -200,7 +200,7 @@ ON bee_names.gene = bt2am.am')
 merge(btSpliceCompare[btSpliceCompare$min < 1 & btSpliceCompare$max > 1,], bt2am, by.x="gene", by.y="bt")
 ```
 
-### TMP for the set of all orthologous genes for network analysis
+### TPM for the set of all orthologous genes for network analysis
 ```{r}
 tpm <- dbGetQuery(db,
 'SELECT DISTINCT bt2am.am AS id, rsem_am.*, rsem_bt.*, rsem_ln.*, rsem_lf.* FROM am2bt
@@ -221,8 +221,129 @@ ON rsem_bt.gene = bt2am.bt
 JOIN rsem_ln
 ON rsem_ln.gene = rbb_amln.ln
 JOIN rsem_lf
-ON rsem_lf.gene = rbb_amlf.lf')
+ON rsem_lf.gene = rbb_amlf.lf
+GROUP BY id')
 tpm <- tpm[, which(!grepl("gene",colnames(tpm)))]
+rownames(tpm) <- tpm$id
+tpm <- t(tpm[, -1])
+tpm <- log(1+tpm)     ## NOTE THAT WE HAVE LOGGED THE EXPRESSION DATA
 
-treatmens <- dbGetQuery(db, 'SELECT * FROM treatments')
+treatments <- dbGetQuery(db, 'SELECT * FROM treatments')
+```
+
+### Check for and remove strongly outlying samples
+```{r}
+library(ecodist)
+library(ggplot2)
+library(ggrepel)
+library(dplyr)
+library(WGCNA)
+
+nmds.output <- dist(tpm) %>% dist %>% nmds()
+data.frame(id = rownames(tpm), nmds.output$conf[[length(nmds.output$conf)]], stringsAsFactors = F) %>% left_join(treatments, by = "id")  %>% ggplot(aes(X1,X2, shape = treatment)) + geom_point(aes(colour = species)) + geom_text_repel(aes(label = id), size=3.6) + xlab("NMDS 1") + ylab("NMDS 2")
+
+tpm <- tpm[!(rownames(tpm) %in% c("lf2", "lf15", "ln9", "ln10")), ]
+treatments <- treatments[!(treatments$id %in% c("lf2", "lf15", "ln9", "ln10")), ] # am5 is also a little weird
+
+# Check that everything is ok with the data, as judged by WGCNA package - yes it is
+goodSamplesGenes(tpm)$allOK
+
+```
+
+### Have a look at the clustering now that the outliers have been removed
+```{r}
+nmds.output <- dist(tpm) %>% dist %>% nmds()
+data.frame(id = rownames(tpm), nmds.output$conf[[length(nmds.output$conf)]], stringsAsFactors = F) %>% left_join(treatments, by = "id")  %>% ggplot(aes(X1,X2, colour = treatment)) + geom_point(aes(shape = species)) + geom_text_repel(aes(label = id), size=3.6) + xlab("NMDS 1") + ylab("NMDS 2")
+```
+
+
+### First we need to choose a 'soft thresholding power' for the construction of the network
+```{r}
+threshold.powers <- pickSoftThreshold(tpm, powerVector = 1:30, verbose = 0) # We choose power 1
+
+threshold.powers[[2]] %>% ggplot(aes(x = Power, y = SFT.R.sq)) + geom_hline(yintercept = 0.9,linetype=2) + geom_point() + geom_line()
+```
+
+```{r}
+soft.power <- 1
+# Make the network using the all-in-one function from WGCNA
+network <- blockwiseModules(tpm, power = soft.power,
+                              networkType = "unsigned", 
+                              minModuleSize = 30,
+                              maxBlockSize = 9000,
+                              deepSplit = 2, 
+                              pamRespectsDendro = FALSE,
+                              ht = 0.25, numericLabels = TRUE, 
+                              saveTOMs = FALSE, verbose = 0)
+
+cat("There are this many transcripts in each of the modules:")
+table(network$colors)
+```
+
+### Now plot the network to look at the modules that we identified
+```{r}
+
+module.cluster.plot <- function(network){
+  moduleColors <- labels2colors(c(0,1:max(network$colors)))
+  sizeGrWindow(12,6)
+  # Use the layout function for more involved screen sectioning
+  layout(matrix(1:4, 2), heights = c(0.8, 0.2), widths = c(1,1))
+  layout.show(4);
+  
+  # Plot the consensus network dendrogram and the module colors underneath for each block
+    plotDendroAndColors(network$dendrograms[[1]], moduleColors[1 + network$colors],
+                        "Module colors",
+                        main = "Gene dendrogram and module colors",
+                        dendroLabels = FALSE, hang = 0.03,
+                        addGuide = TRUE, guideHang = 0.05,
+                        setLayout = FALSE)
+}
+
+module.cluster.plot(network)
+```
+
+```{r}
+
+library(tidyr)
+
+eigengenes <- data.frame(id = rownames(tpm), network$MEs, stringsAsFactors = F) %>%
+  left_join(treatments, by = "id") %>%
+  gather(key = module, value = eigengene, starts_with("ME")) %>%
+  mutate(colony = paste(species, colony, sep=""))
+
+eigengenes %>% ggplot(aes(x = species, y = eigengene, fill = treatment)) + 
+  geom_boxplot() + facet_wrap(~module, scales = "free")
+
+```
+
+```{r}
+eigengenes %>% filter(species == "am") %>% ggplot(aes(x = treatment, y = eigengene, fill = treatment)) + 
+  geom_boxplot() + facet_wrap(~module, scales = "free")
+```
+
+```{r}
+eigengenes %>% filter(species == "bt") %>% ggplot(aes(x = treatment, y = eigengene, fill = treatment)) + 
+  geom_boxplot() + facet_wrap(~module, scales = "free")
+```
+
+```{r}
+eigengenes %>% filter(species == "lf") %>% ggplot(aes(x = treatment, y = eigengene, fill = treatment)) + 
+  geom_boxplot() + facet_wrap(~module, scales = "free")
+```
+
+```{r}
+eigengenes %>% filter(species == "ln") %>% ggplot(aes(x = treatment, y = eigengene, fill = treatment)) + 
+  geom_boxplot() + facet_wrap(~module, scales = "free")
+```
+
+```{r}
+library(lme4)
+library(car)
+mods <- unique(eigengenes$module)
+outputs <- list()
+
+for(i in 1:length(mods)) outputs[[i]] <- Anova(lmer(eigengene ~ species + treatment + (1|colony), 
+                                      data = eigengenes[eigengenes$module == mods[i], ]), Type = "III")
+outputs
+
 ```
