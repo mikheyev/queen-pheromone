@@ -200,10 +200,10 @@ ON bee_names.gene = bt2am.am')
 merge(btSpliceCompare[btSpliceCompare$min < 1 & btSpliceCompare$max > 1,], bt2am, by.x="gene", by.y="bt")
 ```
 
-### TMP for the set of all orthologous genes
+### TMP for the set of all orthologous genes for network analysis
 ```{r}
 tpm <- dbGetQuery(db,
-'SELECT bt2am.bt AS bt, bt2am.am AS am, rbb_amln.ln AS ln, rbb_amlf.lf AS lf, rsem_am.*, rsem_bt.*, rsem_ln.*, rsem_lf.* FROM am2bt
+'SELECT DISTINCT bt2am.am AS id, rsem_am.*, rsem_bt.*, rsem_ln.*, rsem_lf.* FROM am2bt
 JOIN bt2am
 ON am2bt.bt = bt2am.bt AND bt2am.bt = bt2am.bt
 JOIN (SELECT ln2am.am, ln2am.ln  FROM ln2am
@@ -223,4 +223,6 @@ ON rsem_ln.gene = rbb_amln.ln
 JOIN rsem_lf
 ON rsem_lf.gene = rbb_amlf.lf')
 tpm <- tpm[, which(!grepl("gene",colnames(tpm)))]
+
+treatmens <- dbGetQuery(db, 'SELECT * FROM treatments')
 ```
