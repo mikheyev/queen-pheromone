@@ -25,19 +25,18 @@ if [ "$species" == "bt" ]; then
 	$rsem/rsem-generate-data-matrix $samples > $refdir/$species.matrix
     conditions="5,5"
 elif [ "$species" == "am" ]; then    
-	samples=`for i in 2 4 6 1 3 5; do echo -ne $refdir/$species$i".isoforms.results ";done`
+	samples=`for i in 2 4 6 1 3; do echo -ne $refdir/$species$i".isoforms.results ";done`
 	$rsem/rsem-generate-data-matrix $samples > $refdir/$species.matrix
-    conditions="3,3"
+    conditions="3,2"
 elif [ "$species" == "lf" ]; then
-	samples=`for i in 2 4 6 8 10 12 14 16 1 3 5 7 11 13 15; do echo -ne $refdir/$species$i".isoforms.results " ;done`
+	samples=`for i in 4 6 8 10 12 14 16 1 3 5 7 11 13; do echo -ne $refdir/$species$i".isoforms.results " ;done`
 	echo $samples
 	$rsem/rsem-generate-data-matrix $samples > $refdir/$species.matrix
-    conditions="8,7"
+    conditions="7,6"
 elif [ "$species" == "ln" ]; then
-    samples=`for i in 1 3 5 7 9 11 2 4 6 8 10 12; do echo -ne $refdir/$species$i".isoforms.results ";done`
+    samples=`for i in 1 3 5 7 11 2 4 6 8  12; do echo -ne $refdir/$species$i".isoforms.results ";done`
 	$rsem/rsem-generate-data-matrix $samples > $refdir/$species.matrix
-    conditions="6,6"
-
+    conditions="5,5"
 fi
 
 $rsem/rsem-generate-data-matrix `echo $samples | sed 's/isoforms/genes/g'` > $refdir/$species.genes.matrix
