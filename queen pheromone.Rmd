@@ -1,0 +1,226 @@
+---
+title: "Queen pheromone gene expression analysis"
+author: "Sasha Mikheyev"
+date: "5/3/2017"
+output: html_document
+---
+
+```{r}
+library(RSQLite)
+db <- dbConnect(SQLite(), dbname="data/queen pheromone.db")
+```
+
+## comparing whether gene expression is correlated across species
+### _L. niger vs. L. flavus_
+```{r}
+l2l <- dbGetQuery(db, '
+SELECT rbb.lf AS lf_gene, rbb.ln AS ln_gene, ebseq_gene_lf.PostFC AS lf_fc, ebseq_gene_ln.PostFC AS ln_fc FROM ebseq_gene_lf
+JOIN
+    (SELECT ln2lf.lf, ln2lf.ln  FROM ln2lf
+            JOIN lf2ln
+                ON ln2lf.ln = lf2ln.ln AND ln2lf.lf = lf2ln.lf  ) AS rbb
+ON rbb.lf = ebseq_gene_lf.gene
+JOIN ebseq_gene_ln
+ON rbb.ln = ebseq_gene_ln.gene')
+
+with(l2l, cor.test(lf_fc, ln_fc,method="spearman"))
+```
+
+### _L. niger vs._ bumblebees
+```{r}
+l2b <- dbGetQuery(db, 
+'SELECT rbb.bt AS bt_gene, rbb.ln AS ln_gene, ebseq_gene_bt.PostFC AS bt_fc, ebseq_gene_ln.PostFC AS ln_fc FROM ebseq_gene_bt
+JOIN
+    (SELECT ln2bt.bt, ln2bt.ln  FROM ln2bt
+            JOIN bt2ln
+                ON ln2bt.ln = bt2ln.ln AND ln2bt.bt = bt2ln.bt  ) AS rbb
+ON rbb.bt = ebseq_gene_bt.gene
+JOIN ebseq_gene_ln
+ON rbb.ln = ebseq_gene_ln.gene')
+
+with(l2b, cor.test(ln_fc, bt_fc,method="s"))
+```
+
+### _L. niger vs._ honey bees
+```{r}
+l2a <- dbGetQuery(db, '
+SELECT rbb.am AS am_gene, rbb.ln AS ln_gene, ebseq_gene_am.PostFC AS am_fc, ebseq_gene_ln.PostFC AS ln_fc FROM ebseq_gene_am
+JOIN
+    (SELECT ln2am.am, ln2am.ln  FROM ln2am
+            JOIN am2ln
+                ON ln2am.ln = am2ln.ln AND ln2am.am = am2ln.am  ) AS rbb
+ON rbb.am = ebseq_gene_am.gene
+JOIN ebseq_gene_ln
+ON rbb.ln = ebseq_gene_ln.gene')
+
+cor.test(l2a$ln_fc, l2a$am_fc, method="spearman")
+```
+
+### _L. flavus vs._ bumblebees
+```{r}
+l2b <- dbGetQuery(db, 
+'SELECT rbb.bt AS bt_gene, rbb.lf AS lf_gene, ebseq_gene_bt.PostFC AS bt_fc, ebseq_gene_lf.PostFC AS lf_fc FROM ebseq_gene_bt
+JOIN
+    (SELECT lf2bt.bt, lf2bt.lf  FROM lf2bt
+            JOIN bt2lf
+                ON lf2bt.lf = bt2lf.lf AND lf2bt.bt = bt2lf.bt  ) AS rbb
+ON rbb.bt = ebseq_gene_bt.gene
+JOIN ebseq_gene_lf
+ON rbb.lf = ebseq_gene_lf.gene')
+with(l2b, cor.test(lf_fc, bt_fc,method="spearman"))
+```
+
+### _L. flavus vs._ honey bees
+```{r}
+l2a <- dbGetQuery(db, '
+SELECT rbb.am AS am_gene, rbb.lf AS lf_gene, ebseq_gene_am.PostFC AS am_fc, ebseq_gene_lf.PostFC AS lf_fc FROM ebseq_gene_am
+JOIN
+    (SELECT lf2am.am, lf2am.lf  FROM lf2am
+            JOIN am2lf
+                ON lf2am.lf = am2lf.lf AND lf2am.am = am2lf.am  ) AS rbb
+ON rbb.am = ebseq_gene_am.gene
+JOIN ebseq_gene_lf
+ON rbb.lf = ebseq_gene_lf.gene')
+
+with(l2a, cor.test(lf_fc, am_fc, method="spearman"))
+```
+
+### bumblebees _vs._ honey bees
+```{r}
+b2a <- dbGetQuery(db, '
+SELECT rbb.am AS am_gene, rbb.bt AS bt_gene, ebseq_gene_am.PostFC AS am_fc, ebseq_gene_bt.PostFC AS bt_fc FROM ebseq_gene_am
+JOIN
+    (SELECT bt2am.am, bt2am.bt  FROM bt2am
+            JOIN am2bt
+                ON bt2am.bt = am2bt.bt AND bt2am.am = am2bt.am  ) AS rbb
+ON rbb.am = ebseq_gene_am.gene
+JOIN ebseq_gene_bt
+ON rbb.bt = ebseq_gene_bt.gene')
+
+with(b2a, cor.test(bt_fc, am_fc, method="spearman"))
+```
+
+## Identifying differential splicing
+
+### Honey bees
+```{r}
+amSplice<- dbGetQuery(db, 'SELECT isoforms_am.gene, isoforms_am.isoform, PostFC FROM isoforms_am
+JOIN
+    (SELECT gene, COUNT(*) FROM ebseq_padj_isoform_am 
+    JOIN isoforms_am
+    ON isoforms_am.isoform = ebseq_padj_isoform_am.isoform
+    GROUP BY gene
+    HAVING COUNT(*)>1 ) AS multiISO
+ON multiIso.gene = isoforms_am.gene
+JOIN ebseq_padj_isoform_am 
+ON ebseq_padj_isoform_am.isoform = isoforms_am.isoform
+ORDER BY isoforms_am.gene')
+amSpliceMin <- aggregate(amSplice$PostFC, by=list(amSplice$gene), FUN="min")
+amSpliceMax <- aggregate(amSplice$PostFC, by=list(amSplice$gene), FUN="max")
+amSpliceCompare <- merge(amSpliceMin, amSpliceMax, by = "Group.1")
+colnames(amSpliceCompare) <- c("gene", "min", "max")
+amSpliceCompare$gene[amSpliceCompare$min < 1 & amSpliceCompare$max > 1]
+```
+
+### _L. flavus_
+```{r}
+lfSplice<- dbGetQuery(db, 'SELECT isoforms_lf.gene, isoforms_lf.isoform, PostFC FROM isoforms_lf
+JOIN
+    (SELECT gene, COUNT(*) FROM ebseq_padj_isoform_lf 
+    JOIN isoforms_lf
+    ON isoforms_lf.isoform = ebseq_padj_isoform_lf.isoform
+    GROUP BY gene
+    HAVING COUNT(*)>1 ) AS multiISO
+ON multiIso.gene = isoforms_lf.gene
+JOIN ebseq_padj_isoform_lf 
+ON ebseq_padj_isoform_lf.isoform = isoforms_lf.isoform
+ORDER BY isoforms_lf.gene')
+lfSpliceMin <- aggregate(lfSplice$PostFC, by=list(lfSplice$gene), FUN="min")
+lfSpliceMax <- aggregate(lfSplice$PostFC, by=list(lfSplice$gene), FUN="max")
+lfSpliceCompare <- merge(lfSpliceMin, lfSpliceMax, by = "Group.1")
+colnames(lfSpliceCompare) <- c("gene", "min", "max")
+lfSpliceCompare$gene[lfSpliceCompare$min < 1 & lfSpliceCompare$max > 1]
+
+lf2am <- dbGetQuery(db, 'SELECT lf2am.am, lf2am.lf, name FROM lf2am
+JOIN bee_names
+ON bee_names.gene = lf2am.am')
+
+merge(lfSpliceCompare[lfSpliceCompare$min < 1 & lfSpliceCompare$max > 1,], lf2am, by.x="gene", by.y="lf")
+```
+
+### _L. niger_
+```{r}
+lnSplice<- dbGetQuery(db, 'SELECT isoforms_ln.gene, isoforms_ln.isoform, PostFC FROM isoforms_ln
+JOIN
+    (SELECT gene, COUNT(*) FROM ebseq_padj_isoform_ln 
+    JOIN isoforms_ln
+    ON isoforms_ln.isoform = ebseq_padj_isoform_ln.isoform
+    GROUP BY gene
+    HAVING COUNT(*)>1 ) AS multiISO
+ON multiIso.gene = isoforms_ln.gene
+JOIN ebseq_padj_isoform_ln 
+ON ebseq_padj_isoform_ln.isoform = isoforms_ln.isoform
+ORDER BY isoforms_ln.gene')
+lnSpliceMin <- aggregate(lnSplice$PostFC, by=list(lnSplice$gene), FUN="min")
+lnSpliceMax <- aggregate(lnSplice$PostFC, by=list(lnSplice$gene), FUN="max")
+lnSpliceCompare <- merge(lnSpliceMin, lnSpliceMax, by = "Group.1")
+colnames(lnSpliceCompare) <- c("gene", "min", "max")
+lnSpliceCompare$gene[lnSpliceCompare$min < 1 & lnSpliceCompare$max > 1]
+
+ln2am <- dbGetQuery(db, 'SELECT ln2am.am, ln2am.ln, name FROM ln2am
+JOIN bee_names
+ON bee_names.gene = ln2am.am')
+
+merge(lnSpliceCompare[lnSpliceCompare$min < 1 & lnSpliceCompare$max > 1,], ln2am, by.x="gene", by.y="ln")
+```
+
+### bumblebees
+```{r}
+btSplice<- dbGetQuery(db, 'SELECT isoforms_bt.gene, isoforms_bt.isoform, PostFC FROM isoforms_bt
+JOIN
+    (SELECT gene, COUNT(*) FROM ebseq_padj_isoform_bt 
+    JOIN isoforms_bt
+    ON isoforms_bt.isoform = ebseq_padj_isoform_bt.isoform
+    GROUP BY gene
+    HAVING COUNT(*)>1 ) AS multiISO
+ON multiIso.gene = isoforms_bt.gene
+JOIN ebseq_padj_isoform_bt 
+ON ebseq_padj_isoform_bt.isoform = isoforms_bt.isoform
+ORDER BY isoforms_bt.gene')
+btSpliceMin <- aggregate(btSplice$PostFC, by=list(btSplice$gene), FUN="min")
+btSpliceMax <- aggregate(btSplice$PostFC, by=list(btSplice$gene), FUN="max")
+btSpliceCompare <- merge(btSpliceMin, btSpliceMax, by = "Group.1")
+colnames(btSpliceCompare) <- c("gene", "min", "max")
+btSpliceCompare$gene[btSpliceCompare$min < 1 & btSpliceCompare$max > 1]
+
+bt2am <- dbGetQuery(db, 'SELECT bt2am.am, bt2am.bt, name FROM bt2am
+JOIN bee_names
+ON bee_names.gene = bt2am.am')
+
+merge(btSpliceCompare[btSpliceCompare$min < 1 & btSpliceCompare$max > 1,], bt2am, by.x="gene", by.y="bt")
+```
+
+### TMP for the set of all orthologous genes
+```{r}
+tpm <- dbGetQuery(db,
+'SELECT bt2am.bt AS bt, bt2am.am AS am, rbb_amln.ln AS ln, rbb_amlf.lf AS lf, rsem_am.*, rsem_bt.*, rsem_ln.*, rsem_lf.* FROM am2bt
+JOIN bt2am
+ON am2bt.bt = bt2am.bt AND bt2am.bt = bt2am.bt
+JOIN (SELECT ln2am.am, ln2am.ln  FROM ln2am
+    JOIN am2ln
+    ON ln2am.ln = am2ln.ln AND ln2am.am = am2ln.am  ) AS rbb_amln
+ON rbb_amln.am = bt2am.am
+JOIN (SELECT lf2am.am, lf2am.lf  FROM lf2am
+    JOIN am2lf
+        ON lf2am.lf = am2lf.lf AND lf2am.am = am2lf.am  ) AS rbb_amlf
+ON rbb_amlf.am = bt2am.am 
+JOIN rsem_am
+ON rsem_am.gene = bt2am.am
+JOIN rsem_bt
+ON rsem_bt.gene = bt2am.bt
+JOIN rsem_ln
+ON rsem_ln.gene = rbb_amln.ln
+JOIN rsem_lf
+ON rsem_lf.gene = rbb_amlf.lf')
+tpm <- tpm[, which(!grepl("gene",colnames(tpm)))]
+```
