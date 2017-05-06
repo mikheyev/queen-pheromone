@@ -186,7 +186,7 @@ ON bee_names.gene = ln2am.am')
 merge(lnSpliceCompare[lnSpliceCompare$min < 1 & lnSpliceCompare$max > 1,], ln2am, by.x="gene", by.y="ln")
 ```
 
-### bumblebees
+### Bumblebees
 ```{r}
 btSplice<- dbGetQuery(db, 'SELECT isoforms_bt.gene, isoforms_bt.isoform, PostFC FROM isoforms_bt
 JOIN
@@ -211,8 +211,8 @@ ON bee_names.gene = bt2am.am')
 
 merge(btSpliceCompare[btSpliceCompare$min < 1 & btSpliceCompare$max > 1,], bt2am, by.x="gene", by.y="bt")
 ```
-
-### TPM for the set of all orthologous genes for network analysis
+## Gene co-expression network analysis
+### Get TPM for the set of all orthologous genes for network analysis
 ```{r}
 tpm <- dbGetQuery(db,
                   'SELECT DISTINCT bt2am.am AS id, rsem_am.*, rsem_bt.*, rsem_ln.*, rsem_lf.* FROM am2bt
@@ -235,19 +235,23 @@ ON rsem_ln.gene = rbb_amln.ln
 JOIN rsem_lf
 ON rsem_lf.gene = rbb_amlf.lf
 GROUP BY id')
-tpm <- tpm[, which(!grepl("gene",colnames(tpm)))]
+tpm <- tpm[, which(!grepl("gene", colnames(tpm)))]
 rownames(tpm) <- tpm$id
 tpm <- t(tpm[, -1])
 tpm <- log(1+tpm)     ## NOTE THAT WE HAVE LOGGED THE EXPRESSION DATA
 
 treatments <- dbGetQuery(db, 'SELECT * FROM treatments')
+
+# Experiment: expression relative to the max observed for that species
+# n.per.species <- as.numeric(table(treatments$species))
+# tpm <- tpm * apply(tpm, 2, function(x) 1 / unlist(mapply(rep, tapply(x, treatments$species, max), each = n.per.species)))
+
 ```
 
 ### Check for and remove strongly outlying samples
 ```{r}
-
 nmds.output <- dist(tpm) %>% nmds()
-data.frame(id = rownames(tpm), nmds.output$conf[[length(nmds.output$conf)]], stringsAsFactors = F) %>% left_join(treatments, by = "id")  %>% ggplot(aes(X1,X2, shape = treatment)) + geom_point(aes(colour = species)) + geom_text_repel(aes(label = id), size=3.6) + xlab("NMDS 1") + ylab("NMDS 2")
+data.frame(id = rownames(tpm), nmds.output$conf[[length(nmds.output$conf)]], stringsAsFactors = F) %>% left_join(treatments, by = "id")  %>% ggplot(aes(X1,X2, shape = species)) + geom_point(aes(colour = treatment)) + geom_text_repel(aes(label = id), size=3.6) + xlab("NMDS 1") + ylab("NMDS 2")
 
 tpm <- tpm[!(rownames(tpm) %in% c("lf2", "lf15", "ln9", "ln10")), ]
 treatments <- treatments[!(treatments$id %in% c("lf2", "lf15", "ln9", "ln10")), ] # am5 is also a little weird
@@ -263,7 +267,6 @@ nmds.output <- dist(tpm) %>% nmds()
 data.frame(id = rownames(tpm), nmds.output$conf[[length(nmds.output$conf)]], stringsAsFactors = F) %>% left_join(treatments, by = "id")  %>% ggplot(aes(X1,X2)) + geom_point(aes(shape = species, colour = treatment)) + geom_text_repel(aes(label = id), size=3.6) + xlab("NMDS 1") + ylab("NMDS 2")
 ```
 
-
 ### First we need to choose a 'soft thresholding power' for the construction of the network
 ```{r}
 threshold.powers <- pickSoftThreshold(tpm, powerVector = 1:30, verbose = 0) # We choose power 1
@@ -272,7 +275,7 @@ threshold.powers[[2]] %>% ggplot(aes(x = Power, y = SFT.R.sq)) + geom_hline(yint
 ```
 
 ```{r}
-soft.power <- 30
+soft.power <- 1
 # Make the network using the all-in-one function from WGCNA
 network <- blockwiseModules(tpm, power = soft.power,
                             networkType = "unsigned", 
@@ -282,8 +285,10 @@ network <- blockwiseModules(tpm, power = soft.power,
                             pamRespectsDendro = FALSE,
                             ht = 0.25, numericLabels = TRUE, 
                             saveTOMs = FALSE, verbose = 0)
+```
 
-cat("There are this many transcripts in each of the modules:")
+### Here is the number of genes per module:
+```{r}
 table(network$colors)
 ```
 
@@ -293,8 +298,8 @@ module.cluster.plot <- function(network){
   moduleColors <- labels2colors(c(0,1:max(network$colors)))
   sizeGrWindow(12,6)
   # Use the layout function for more involved screen sectioning
-  layout(matrix(1:4, 2), heights = c(0.8, 0.2), widths = c(1,1))
-  layout.show(4);
+  layout(matrix(1:2, 2), heights = c(0.8, 0.2), widths = c(1,1))
+  #layout.show(4);
   
   # Plot the consensus network dendrogram and the module colors underneath for each block
   plotDendroAndColors(network$dendrograms[[1]], moduleColors[1 + network$colors],
@@ -308,43 +313,50 @@ module.cluster.plot <- function(network){
 module.cluster.plot(network)
 ```
 
+### Plot the eigengene for each combination of species, treatment and module
 ```{r}
-
 eigengenes <- data.frame(id = rownames(tpm), network$MEs, stringsAsFactors = F) %>%
   left_join(treatments, by = "id") %>%
   gather(key = module, value = eigengene, starts_with("ME")) %>%
-  mutate(colony = paste(species, colony, sep=""))
+  mutate(colony = paste(species, colony, sep=""),
+         module = factor(module, levels = paste("ME", 0:length(unique(module)), sep="")))
 
 eigengenes %>% ggplot(aes(x = species, y = eigengene, fill = treatment)) + 
   geom_boxplot() + facet_wrap(~module, scales = "free")
 
 ```
 
+### Examine just the honeybee data
 ```{r}
 eigengenes %>% filter(species == "am") %>% ggplot(aes(x = treatment, y = eigengene, fill = treatment)) + 
   geom_boxplot() + facet_wrap(~module, scales = "free")
 ```
 
+### Examine just the bumblebee data
 ```{r}
 eigengenes %>% filter(species == "bt") %>% ggplot(aes(x = treatment, y = eigengene, fill = treatment)) + 
   geom_boxplot() + facet_wrap(~module, scales = "free")
 ```
 
+### Examine just the _L. flavus_ data
 ```{r}
 eigengenes %>% filter(species == "lf") %>% ggplot(aes(x = treatment, y = eigengene, fill = treatment)) + 
   geom_boxplot() + facet_wrap(~module, scales = "free")
 ```
 
+### Examine just the _L. niger_ data
 ```{r}
 eigengenes %>% filter(species == "ln") %>% ggplot(aes(x = treatment, y = eigengene, fill = treatment)) + 
   geom_boxplot() + facet_wrap(~module, scales = "free")
 ```
 
+### Run a linear mixed model on each module
 ```{r}
 mods <- unique(eigengenes$module)
 outputs <- list()
 
 for(i in 1:length(mods)) outputs[[i]] <- Anova(lmer(eigengene ~ species + treatment + (1|colony), 
                                                     data = eigengenes[eigengenes$module == mods[i], ]), Type = "III")
+names(outputs) <- paste("Results for module", mods)
 outputs
 ```
