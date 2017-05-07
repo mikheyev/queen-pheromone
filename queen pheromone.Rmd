@@ -12,6 +12,7 @@ library(RSQLite)
 library(WGCNA)
 library(dplyr)
 library(tidyr)
+library(stringr)
 library(ggplot2)
 library(ggrepel)
 library(lme4)
@@ -25,10 +26,10 @@ db <- dbConnect(SQLite(), dbname="data/queen pheromone.db")
 
 
 ## Comparing whether gene expression is correlated across species
-### _L. niger vs. L. flavus_ 
+
+### Define helper function to retrieve fold-change expression data on genes that are each other's reciprocal best BLAST
 ```{r}
 get.fc.for.pair.species <- function(species1, species2){
-  require(stringr)
   query <- 'SELECT rbb.X AS X_gene, rbb.Y AS Y_gene, ebseq_gene_X.PostFC AS X_fc, ebseq_gene_Y.PostFC AS Y_fc FROM ebseq_gene_X
              JOIN
   (SELECT Y2X.X, Y2X.Y  FROM Y2X
@@ -40,11 +41,12 @@ get.fc.for.pair.species <- function(species1, species2){
   
   query <- str_replace_all(query, "X", species1)
   query <- str_replace_all(query, "Y", species2)
-  
   dbGetQuery(db, query)
 }
+```
 
-
+### _L. niger vs. L. flavus_ 
+```{r}
 l2l <- get.fc.for.pair.species("lf", "ln")
 with(l2l, cor.test(lf_fc, ln_fc, method="spearman"))
 ```
@@ -52,14 +54,12 @@ with(l2l, cor.test(lf_fc, ln_fc, method="spearman"))
 ### _L. niger vs._ bumblebees
 ```{r}
 l2b <- get.fc.for.pair.species("ln", "bt")
-
 with(l2b, cor.test(ln_fc, bt_fc,method="s"))
 ```
 
 ### _L. niger vs._ honey bees
 ```{r}
 l2a <- get.fc.for.pair.species("ln", "am")
-
 cor.test(l2a$ln_fc, l2a$am_fc, method="spearman")
 ```
 
@@ -72,116 +72,72 @@ with(l2b, cor.test(lf_fc, bt_fc,method="spearman"))
 ### _L. flavus vs._ honey bees
 ```{r}
 l2a <- get.fc.for.pair.species("lf", "am")
-
 with(l2a, cor.test(lf_fc, am_fc, method="spearman"))
 ```
 
 ### Bumblebees _vs._ honey bees
 ```{r}
 b2a <- get.fc.for.pair.species("bt", "am")
-
 with(b2a, cor.test(bt_fc, am_fc, method="spearman"))
 ```
 
 ## Identifying differential splicing
 
+#### Define a function to search for significantly alternatively spliced genes. We define these as genes that have at least two differentially expressed isoforms, where queen pheromone stimulates expresison of one isoform but surpresses expression of another
+```{r}
+find.alternatively.spliced.genes <- function(species){
+  query <- 'SELECT isoforms_X.gene, isoforms_X.isoform, PostFC FROM isoforms_X
+JOIN
+             (SELECT gene, COUNT(*) FROM ebseq_padj_isoform_X 
+             JOIN isoforms_X
+             ON isoforms_X.isoform = ebseq_padj_isoform_X.isoform
+             GROUP BY gene
+             HAVING COUNT(*)>1 ) AS multiISO
+             ON multiIso.gene = isoforms_X.gene
+             JOIN ebseq_padj_isoform_X 
+             ON ebseq_padj_isoform_X.isoform = isoforms_X.isoform
+             ORDER BY isoforms_X.gene'
+  query <- str_replace_all(query, "X", species)
+  Splice <- dbGetQuery(db, query)
+  
+  SpliceMin <- aggregate(Splice$PostFC, by=list(Splice$gene), FUN="min")
+  SpliceMax <- aggregate(Splice$PostFC, by=list(Splice$gene), FUN="max")
+  SpliceCompare <- merge(SpliceMin, SpliceMax, by = "Group.1")
+  colnames(SpliceCompare) <- c("gene", "min", "max")
+  output <- data.frame(gene = SpliceCompare$gene[SpliceCompare$min < 1 & SpliceCompare$max > 1], stringsAsFactors = F)
+  if(species != "am"){
+    rbb <- get.fc.for.pair.species(species, "am")[,1:2]
+    names(rbb) <- c("gene", "Amel_ortholog_rbb")
+    output <- left_join(output, rbb, by = "gene") 
+  }
+  
+  left_join(output, SpliceCompare, by = "gene") 
+}
+```
+
 ### Honey bees
 ```{r}
-amSplice<- dbGetQuery(db, 'SELECT isoforms_am.gene, isoforms_am.isoform, PostFC FROM isoforms_am
-JOIN
-    (SELECT gene, COUNT(*) FROM ebseq_padj_isoform_am 
-    JOIN isoforms_am
-    ON isoforms_am.isoform = ebseq_padj_isoform_am.isoform
-    GROUP BY gene
-    HAVING COUNT(*)>1 ) AS multiISO
-ON multiIso.gene = isoforms_am.gene
-JOIN ebseq_padj_isoform_am 
-ON ebseq_padj_isoform_am.isoform = isoforms_am.isoform
-ORDER BY isoforms_am.gene')
-amSpliceMin <- aggregate(amSplice$PostFC, by=list(amSplice$gene), FUN="min")
-amSpliceMax <- aggregate(amSplice$PostFC, by=list(amSplice$gene), FUN="max")
-amSpliceCompare <- merge(amSpliceMin, amSpliceMax, by = "Group.1")
-colnames(amSpliceCompare) <- c("gene", "min", "max")
-amSpliceCompare$gene[amSpliceCompare$min < 1 & amSpliceCompare$max > 1]
+am.alt.splice <- find.alternatively.spliced.genes("am")
+am.alt.splice
 ```
 
 ### _L. flavus_
 ```{r}
-lfSplice<- dbGetQuery(db, 'SELECT isoforms_lf.gene, isoforms_lf.isoform, PostFC FROM isoforms_lf
-JOIN
-    (SELECT gene, COUNT(*) FROM ebseq_padj_isoform_lf 
-    JOIN isoforms_lf
-    ON isoforms_lf.isoform = ebseq_padj_isoform_lf.isoform
-    GROUP BY gene
-    HAVING COUNT(*)>1 ) AS multiISO
-ON multiIso.gene = isoforms_lf.gene
-JOIN ebseq_padj_isoform_lf 
-ON ebseq_padj_isoform_lf.isoform = isoforms_lf.isoform
-ORDER BY isoforms_lf.gene')
-lfSpliceMin <- aggregate(lfSplice$PostFC, by=list(lfSplice$gene), FUN="min")
-lfSpliceMax <- aggregate(lfSplice$PostFC, by=list(lfSplice$gene), FUN="max")
-lfSpliceCompare <- merge(lfSpliceMin, lfSpliceMax, by = "Group.1")
-colnames(lfSpliceCompare) <- c("gene", "min", "max")
-lfSpliceCompare$gene[lfSpliceCompare$min < 1 & lfSpliceCompare$max > 1]
-
-lf2am <- dbGetQuery(db, 'SELECT lf2am.am, lf2am.lf, name FROM lf2am
-JOIN bee_names
-ON bee_names.gene = lf2am.am')
-
-merge(lfSpliceCompare[lfSpliceCompare$min < 1 & lfSpliceCompare$max > 1,], lf2am, by.x="gene", by.y="lf")
+lf.alt.splice<- find.alternatively.spliced.genes("lf")
+lf.alt.splice
 ```
 
 ### _L. niger_
 ```{r}
-lnSplice<- dbGetQuery(db, 'SELECT isoforms_ln.gene, isoforms_ln.isoform, PostFC FROM isoforms_ln
-JOIN
-    (SELECT gene, COUNT(*) FROM ebseq_padj_isoform_ln 
-    JOIN isoforms_ln
-    ON isoforms_ln.isoform = ebseq_padj_isoform_ln.isoform
-    GROUP BY gene
-    HAVING COUNT(*)>1 ) AS multiISO
-ON multiIso.gene = isoforms_ln.gene
-JOIN ebseq_padj_isoform_ln 
-ON ebseq_padj_isoform_ln.isoform = isoforms_ln.isoform
-ORDER BY isoforms_ln.gene')
-lnSpliceMin <- aggregate(lnSplice$PostFC, by=list(lnSplice$gene), FUN="min")
-lnSpliceMax <- aggregate(lnSplice$PostFC, by=list(lnSplice$gene), FUN="max")
-lnSpliceCompare <- merge(lnSpliceMin, lnSpliceMax, by = "Group.1")
-colnames(lnSpliceCompare) <- c("gene", "min", "max")
-lnSpliceCompare$gene[lnSpliceCompare$min < 1 & lnSpliceCompare$max > 1]
-
-ln2am <- dbGetQuery(db, 'SELECT ln2am.am, ln2am.ln, name FROM ln2am
-JOIN bee_names
-ON bee_names.gene = ln2am.am')
-
-merge(lnSpliceCompare[lnSpliceCompare$min < 1 & lnSpliceCompare$max > 1,], ln2am, by.x="gene", by.y="ln")
+ln.alt.splice <- find.alternatively.spliced.genes("ln")
+ln.alt.splice
 ```
 
 ### Bumblebees
 ```{r}
-btSplice<- dbGetQuery(db, 'SELECT isoforms_bt.gene, isoforms_bt.isoform, PostFC FROM isoforms_bt
-JOIN
-    (SELECT gene, COUNT(*) FROM ebseq_padj_isoform_bt 
-    JOIN isoforms_bt
-    ON isoforms_bt.isoform = ebseq_padj_isoform_bt.isoform
-    GROUP BY gene
-    HAVING COUNT(*)>1 ) AS multiISO
-ON multiIso.gene = isoforms_bt.gene
-JOIN ebseq_padj_isoform_bt 
-ON ebseq_padj_isoform_bt.isoform = isoforms_bt.isoform
-ORDER BY isoforms_bt.gene')
-btSpliceMin <- aggregate(btSplice$PostFC, by=list(btSplice$gene), FUN="min")
-btSpliceMax <- aggregate(btSplice$PostFC, by=list(btSplice$gene), FUN="max")
-btSpliceCompare <- merge(btSpliceMin, btSpliceMax, by = "Group.1")
-colnames(btSpliceCompare) <- c("gene", "min", "max")
-btSpliceCompare$gene[btSpliceCompare$min < 1 & btSpliceCompare$max > 1]
-
-bt2am <- dbGetQuery(db, 'SELECT bt2am.am, bt2am.bt, name FROM bt2am
-JOIN bee_names
-ON bee_names.gene = bt2am.am')
-
-merge(btSpliceCompare[btSpliceCompare$min < 1 & btSpliceCompare$max > 1,], bt2am, by.x="gene", by.y="bt")
+find.alternatively.spliced.genes("bt")  # There are none for B. terrestris
 ```
+
 ## Gene co-expression network analysis
 ### Get TPM for the set of all orthologous genes for network analysis
 ```{r}
