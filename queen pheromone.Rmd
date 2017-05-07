@@ -16,7 +16,9 @@ library(ggplot2)
 library(ggrepel)
 library(lme4)
 library(car)
+library(RColorBrewer)
 library(ecodist)
+allowWGCNAThreads()
 
 db <- dbConnect(SQLite(), dbname="data/queen pheromone.db")
 ```
@@ -241,10 +243,6 @@ tpm <- t(tpm[, -1])
 tpm <- log(1+tpm)     ## NOTE THAT WE HAVE LOGGED THE EXPRESSION DATA
 
 treatments <- dbGetQuery(db, 'SELECT * FROM treatments')
-
-# Experiment: expression relative to the max observed for that species
-# n.per.species <- as.numeric(table(treatments$species))
-# tpm <- tpm * apply(tpm, 2, function(x) 1 / unlist(mapply(rep, tapply(x, treatments$species, max), each = n.per.species)))
 
 ```
 
