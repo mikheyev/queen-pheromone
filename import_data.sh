@@ -42,17 +42,17 @@ for i in data/isoforms/*csv; do
 done
 
 # ## rsem results (TPM)
-echo "DROP TABLE IF EXISTS rsem_am; CREATE TABLE rsem_am (gene varchar, am1 real, am2 real, am3 real, am4 real, am5 real, am6 real, PRIMARY KEY (gene));" > temp.sql
+echo "DROP TABLE IF EXISTS rsem_am; CREATE TABLE rsem_am (gene varchar, am2 real, am4 real, am6 real, am1 real, am3 real, am5 real, PRIMARY KEY (gene));" > temp.sql
 echo '.separator "\t"' >> temp.sql
 echo '.import "data/rsem/am.genes.matrix" rsem_am' >> temp.sql
 cat temp.sql | sqlite3 data/queen\ pheromone.db
 
-echo "DROP TABLE IF EXISTS rsem_bt; CREATE TABLE rsem_bt (gene varchar, bt10 real, bt1 real, bt2 real, bt3 real, bt4 real, bt5 real, bt6 real, bt7 real, bt8 real, bt9 real, PRIMARY KEY (gene));" > temp.sql
+echo "DROP TABLE IF EXISTS rsem_bt; CREATE TABLE rsem_bt (gene varchar, bt2 real, bt4 real, bt5 real, bt8 real, bt10 real, bt1 real, bt3 real, bt6 real, bt7 real, bt9 real, PRIMARY KEY (gene));" > temp.sql
 echo '.separator "\t"' >> temp.sql
 echo '.import "data/rsem/bt.genes.matrix" rsem_bt' >> temp.sql
 cat temp.sql | sqlite3 data/queen\ pheromone.db 	
 
-echo "DROP TABLE IF EXISTS rsem_ln; CREATE TABLE rsem_ln (gene varchar, ln10 real, ln11 real, ln12 real, ln1 real, ln2 real, ln3 real, ln4 real, ln5 real, ln6 real, ln7 real, ln8 real, ln9 real, PRIMARY KEY (gene));" > temp.sql
+echo "DROP TABLE IF EXISTS rsem_ln; CREATE TABLE rsem_ln (gene varchar, ln1 real, ln3 real, ln5 real, ln7 real, ln9 real, ln11 real, ln2 real, ln4 real, ln6 real, ln8 real, ln10 real, ln12 real, PRIMARY KEY (gene));" > temp.sql
 echo '.separator "\t"' >> temp.sql
 echo '.import "data/rsem/ln.genes.matrix" rsem_ln' >> temp.sql
 cat temp.sql | sqlite3 data/queen\ pheromone.db 	
