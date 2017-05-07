@@ -138,6 +138,34 @@ ln.alt.splice
 find.alternatively.spliced.genes("bt")  # There are none for B. terrestris
 ```
 
+## Inspect the GO terms associated with each of the differentially-spliced genes
+```{r}
+go.analysis.splicing <- function(splice.results, ontology){
+  
+  if("Amel_ortholog_rbb" %in% names(splice.results))  
+    splice.results <- splice.results %>% filter(!is.na(Amel_ortholog_rbb)) %>% select(-gene) %>% rename(gene = Amel_ortholog_rbb)
+  go.terms <- tbl(my_db, "bee_go") %>% filter(gene %in% splice.results$gene) %>% collect(n = Inf) %>% as.data.frame()
+  suppressMessages(require(GO.db))
+  go.meanings <- suppressMessages(AnnotationDbi::select(GO.db, unique(go.terms$GO), c("ONTOLOGY", "TERM")))
+  names(go.meanings) <- c("GO", "ontology", "term")
+
+
+  output <- left_join(go.terms, go.meanings, by = "GO") 
+  output <- cbind(left_join(data.frame(gene = output$gene, stringsAsFactors = F), 
+                            tbl(my_db, "bee_names"), copy = T, by = "gene"),
+                       output[,-1])
+  if(ontology == "BP") output <- output %>% filter(ontology == "BP")
+  if(ontology == "CC") output <- output %>% filter(ontology == "CC")
+  if(ontology == "MF") output <- output %>% filter(ontology == "MF")
+  output %>% select(-ontology)
+  
+}
+
+go.analysis.splicing(am.alt.splice, "BP")
+go.analysis.splicing(lf.alt.splice, "BP")
+go.analysis.splicing(ln.alt.splice, "BP")
+```
+
 ## Gene co-expression network analysis
 ### Get TPM for the set of all orthologous genes for network analysis
 ```{r}
