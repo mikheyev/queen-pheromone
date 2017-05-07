@@ -27,89 +27,58 @@ db <- dbConnect(SQLite(), dbname="data/queen pheromone.db")
 ## Comparing whether gene expression is correlated across species
 ### _L. niger vs. L. flavus_ 
 ```{r}
-l2l <- dbGetQuery(db, '
-SELECT rbb.lf AS lf_gene, rbb.ln AS ln_gene, ebseq_gene_lf.PostFC AS lf_fc, ebseq_gene_ln.PostFC AS ln_fc FROM ebseq_gene_lf
-JOIN
-    (SELECT ln2lf.lf, ln2lf.ln  FROM ln2lf
-            JOIN lf2ln
-                ON ln2lf.ln = lf2ln.ln AND ln2lf.lf = lf2ln.lf  ) AS rbb
-ON rbb.lf = ebseq_gene_lf.gene
-JOIN ebseq_gene_ln
-ON rbb.ln = ebseq_gene_ln.gene')
+get.fc.for.pair.species <- function(species1, species2){
+  require(stringr)
+  query <- 'SELECT rbb.X AS X_gene, rbb.Y AS Y_gene, ebseq_gene_X.PostFC AS X_fc, ebseq_gene_Y.PostFC AS Y_fc FROM ebseq_gene_X
+             JOIN
+  (SELECT Y2X.X, Y2X.Y  FROM Y2X
+  JOIN X2Y
+  ON Y2X.Y = X2Y.Y AND Y2X.X = X2Y.X  ) AS rbb
+  ON rbb.X = ebseq_gene_X.gene
+  JOIN ebseq_gene_Y
+  ON rbb.Y = ebseq_gene_Y.gene'
+  
+  query <- str_replace_all(query, "X", species1)
+  query <- str_replace_all(query, "Y", species2)
+  
+  dbGetQuery(db, query)
+}
 
+
+l2l <- get.fc.for.pair.species("lf", "ln")
 with(l2l, cor.test(lf_fc, ln_fc, method="spearman"))
 ```
 
 ### _L. niger vs._ bumblebees
 ```{r}
-l2b <- dbGetQuery(db, 
-                  'SELECT rbb.bt AS bt_gene, rbb.ln AS ln_gene, ebseq_gene_bt.PostFC AS bt_fc, ebseq_gene_ln.PostFC AS ln_fc FROM ebseq_gene_bt
-JOIN
-    (SELECT ln2bt.bt, ln2bt.ln  FROM ln2bt
-            JOIN bt2ln
-                ON ln2bt.ln = bt2ln.ln AND ln2bt.bt = bt2ln.bt  ) AS rbb
-ON rbb.bt = ebseq_gene_bt.gene
-JOIN ebseq_gene_ln
-ON rbb.ln = ebseq_gene_ln.gene')
+l2b <- get.fc.for.pair.species("ln", "bt")
 
 with(l2b, cor.test(ln_fc, bt_fc,method="s"))
 ```
 
 ### _L. niger vs._ honey bees
 ```{r}
-l2a <- dbGetQuery(db, '
-SELECT rbb.am AS am_gene, rbb.ln AS ln_gene, ebseq_gene_am.PostFC AS am_fc, ebseq_gene_ln.PostFC AS ln_fc FROM ebseq_gene_am
-JOIN
-    (SELECT ln2am.am, ln2am.ln  FROM ln2am
-            JOIN am2ln
-                ON ln2am.ln = am2ln.ln AND ln2am.am = am2ln.am  ) AS rbb
-ON rbb.am = ebseq_gene_am.gene
-JOIN ebseq_gene_ln
-ON rbb.ln = ebseq_gene_ln.gene')
+l2a <- get.fc.for.pair.species("ln", "am")
 
 cor.test(l2a$ln_fc, l2a$am_fc, method="spearman")
 ```
 
 ### _L. flavus vs._ bumblebees
 ```{r}
-l2b <- dbGetQuery(db, 
-                  'SELECT rbb.bt AS bt_gene, rbb.lf AS lf_gene, ebseq_gene_bt.PostFC AS bt_fc, ebseq_gene_lf.PostFC AS lf_fc FROM ebseq_gene_bt
-JOIN
-    (SELECT lf2bt.bt, lf2bt.lf  FROM lf2bt
-            JOIN bt2lf
-                ON lf2bt.lf = bt2lf.lf AND lf2bt.bt = bt2lf.bt  ) AS rbb
-ON rbb.bt = ebseq_gene_bt.gene
-JOIN ebseq_gene_lf
-ON rbb.lf = ebseq_gene_lf.gene')
+l2b <- get.fc.for.pair.species("lf", "bt")
 with(l2b, cor.test(lf_fc, bt_fc,method="spearman"))
 ```
 
 ### _L. flavus vs._ honey bees
 ```{r}
-l2a <- dbGetQuery(db, '
-SELECT rbb.am AS am_gene, rbb.lf AS lf_gene, ebseq_gene_am.PostFC AS am_fc, ebseq_gene_lf.PostFC AS lf_fc FROM ebseq_gene_am
-JOIN
-    (SELECT lf2am.am, lf2am.lf  FROM lf2am
-            JOIN am2lf
-                ON lf2am.lf = am2lf.lf AND lf2am.am = am2lf.am  ) AS rbb
-ON rbb.am = ebseq_gene_am.gene
-JOIN ebseq_gene_lf
-ON rbb.lf = ebseq_gene_lf.gene')
+l2a <- get.fc.for.pair.species("lf", "am")
 
 with(l2a, cor.test(lf_fc, am_fc, method="spearman"))
 ```
 
-### bumblebees _vs._ honey bees
+### Bumblebees _vs._ honey bees
 ```{r}
-b2a <- dbGetQuery(db, '
-SELECT rbb.am AS am_gene, rbb.bt AS bt_gene, ebseq_gene_am.PostFC AS am_fc, ebseq_gene_bt.PostFC AS bt_fc FROM ebseq_gene_am
-JOIN
-    (SELECT bt2am.am, bt2am.bt  FROM bt2am
-            JOIN am2bt
-                ON bt2am.bt = am2bt.bt AND bt2am.am = am2bt.am  ) AS rbb
-ON rbb.am = ebseq_gene_am.gene
-JOIN ebseq_gene_bt
-ON rbb.bt = ebseq_gene_bt.gene')
+b2a <- get.fc.for.pair.species("bt", "am")
 
 with(b2a, cor.test(bt_fc, am_fc, method="spearman"))
 ```
