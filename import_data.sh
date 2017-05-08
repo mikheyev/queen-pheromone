@@ -57,7 +57,7 @@ echo '.separator "\t"' >> temp.sql
 echo '.import "data/rsem/ln.genes.matrix" rsem_ln' >> temp.sql
 cat temp.sql | sqlite3 data/queen\ pheromone.db 	
 
-echo "DROP TABLE IF EXISTS rsem_lf; CREATE TABLE rsem_lf (gene varchar, lf10 real, lf11 real, lf12 real, lf13 real, lf14 real, lf15 real, lf16 real, lf1 real, lf2 real, lf3 real, lf4 real, lf5 real, lf6 real, lf7 real, lf8 real, PRIMARY KEY (gene));" > temp.sql
+echo "DROP TABLE IF EXISTS rsem_lf; CREATE TABLE rsem_lf (gene varchar, lf2 real, lf4 real, lf6 real, lf8 real, lf10 real, lf12 real, lf14 real, lf16 real, lf1 real, lf3 real,	lf5 real, lf7 real, lf11 real, lf13 real, lf15 real, PRIMARY KEY (gene));" > temp.sql
 echo '.separator "\t"' >> temp.sql
 echo '.import "data/rsem/lf.genes.matrix" rsem_lf' >> temp.sql
 cat temp.sql | sqlite3 data/queen\ pheromone.db 	
