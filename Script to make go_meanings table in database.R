@@ -5,7 +5,6 @@
 library(GO.db)
 library(dplyr)
 go.meanings <- suppressMessages(AnnotationDbi::select(GO.db, unique((tbl(my_db, "bee_go") %>% dplyr::select(GO) %>% collect(n=Inf) %>% as.data.frame())[,1]), c("GOID", "ONTOLOGY", "TERM")))
-go.meanings
 names(go.meanings) <- c("GO", "ontology", "term")
 
 # Add/overwrite the new table to the database
