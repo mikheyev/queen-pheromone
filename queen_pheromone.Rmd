@@ -1,0 +1,579 @@
+---
+title: "Queen pheromone gene expression analysis"
+author: "Sasha Mikheyev and Luke Holman"
+date: "5/3/2017"
+output:
+  html_document:
+    toc: true # table of content true
+    depth: 3  # upto three depths of headings (specified by #, ## and ###)
+    number_sections: false  ## if you want number sections at each table header
+    theme: united 
+  pdf_document: default
+---
+
+### Load R libraries (install first from CRAN or Bioconductor)
+```{r message=FALSE, warning=FALSE, results="hide"}
+library(WGCNA) # Gene coexpression networks
+library(RSQLite) # Access SQLite databases
+library(reshape2) # data tidying (melt)
+library(dplyr) # data tidying
+library(tidyr) # data tidying
+library(stringr) # string manipulation
+library(ggplot2) # for plots
+library(ggrepel) # for plots
+library(ggdendro) # for plots
+library(gridExtra) # for plots
+library(RColorBrewer) # for plots
+library(ecodist) # for nmds
+library(MuMIn) # for model comparison
+library(sva) # for ComBat function; install via source("https://bioconductor.org/biocLite.R"); biocLite("sva")
+library(pander)
+# library(GOstats) is also needed, but loaded later
+
+# Open database connections (Sasha uses SQL, Luke prefers dplyr)
+db <- dbConnect(SQLite(), dbname="data/queen pheromone.db")
+my_db <- src_sqlite("data/queen pheromone.db")
+
+# These 4 samples should not be used (See below). They were also removed in all non-R analyses (e.g. differential gene expression analyses using ebseq)
+bad.samples <- c("lf1", "ln1", "ln12", "lf12")
+```
+
+### First let's check for and remove strongly outlying samples
+
+Define a function to get gene expression data for a given set of orthologous genes. We define orthologous genes as those that are each other's reciprocal best BLAST. The bad.samples argument can be used to remove some named samples. By default this function logs the expression data (using log10). It returns a list with two elements: the first element is a matrix of expression data (rows = samples, cols = genes), and the second is a data frame giving the species-specific names of the orthologous genes
+```{r}
+make.OGGs <- function(species, bad.samples = NULL, log.data = T){
+  
+  # set up forward mappings, e.g. "am2bt", "am2lf", "am2ln"
+  forward.mappings <- paste(species[1], "2", species[2:length(species)], sep = "")
+  # and reverse mappings, e.g. "bt2am", "lf2am", "ln2am"
+  backward.mappings <- paste(species[2:length(species)], "2", species[1], sep = "")
+  items <- list() # declare empty list
+
+  for(i in 1:length(forward.mappings)){
+    
+    # make a table with 3 columns: first column has species 1 gene,
+    # second column has species 2 gene in forward mapping,
+    # third column has species 2 gene in reverse mapping (this can be NA, or different to col 2)
+    # we want the rows where cols 2 and 3 are the same, indicating reciprocity in the BLAST
+    focal <- left_join(
+      tbl(my_db, forward.mappings[i]) %>% select(-evalue), # get the two mappings and 
+      tbl(my_db, backward.mappings[i]) %>% select(-evalue), # merge by species 1 column
+      by = species[1]
+    ) %>% 
+      collect(n=Inf) %>% as.data.frame  # collect it all and convert to df
+    
+    # Get the RBB rows, and keep the two relevant columns
+    focal <- focal[!is.na(focal[,3]), ]
+    items[[i]] <- focal[focal[,2] == focal[,3], 1:2] 
+  }
+  rbbs <- items[[1]] # If 3 or 4 species, successively merge the results
+  if(length(items) > 1) rbbs <- left_join(rbbs, items[[2]], by = species[1])
+  if(length(items) > 2) rbbs <- left_join(rbbs, items[[3]], by = species[1])
+  
+  # Throw out species1 genes that do not have a RBB in all species
+  rbbs <- rbbs[complete.cases(rbbs), ]
+  names(rbbs) <- gsub("[.]x", "", names(rbbs)) # tidy the row and column names
+  rownames(rbbs) <- NULL
+
+  # Make sure the columns are ordered as in 'species'
+  rbbs <- rbbs[, match(names(rbbs), species)]
+
+  # We know have a list of the names of all the ortholgous genes in each species
+  # Now we use these names to look up the gene expression data for each ortholog
+  expression.tables <- paste("rsem_", species, sep = "")
+  
+  for(i in 1:length(species)){
+    focal.expression <- tbl(my_db, expression.tables[i]) %>% collect(n=Inf) %>% as.data.frame()
+    names(focal.expression)[names(focal.expression) == "gene"] <- species[i]
+    rbbs <- left_join(rbbs, focal.expression, by = species[i])
+  }
+  gene.name.mappings <- rbbs[, names(rbbs) %in% species] # save gene name mappings in separate DF
+  
+  rownames(rbbs) <- rbbs[,1] # Use the gene names for species 1 as row names
+  rbbs <- rbbs[, !(names(rbbs) %in% species)] # remove gene name columns 
+  rbbs <- t(as.matrix(rbbs))
+
+  if(log.data) rbbs <- log10(1 + rbbs)
+  if(!is.null(bad.samples)) rbbs <- rbbs[!(rownames(rbbs) %in% bad.samples), ]
+  
+  # Discard genes where NAs appear
+  rbbs <- rbbs[, !(is.na(colSums(rbbs)))]
+
+  # discard genes where expression is zero for all samples in 1 or more species
+  spp <- str_replace_all(rownames(rbbs), "[:digit:]", "")
+  to.keep <- rep(TRUE, ncol(rbbs))
+  for(i in 1:ncol(rbbs)){
+   if(min(as.numeric(tapply(rbbs[,i], spp, sum))) == 0) to.keep[i] <- FALSE
+ }
+rbbs <- rbbs[, to.keep]
+
+  list(tpm = rbbs, gene.mappings = gene.name.mappings)
+}
+```
+
+
+#### This plot illustrates that 4 of the _Lasius_ ant samples are highly different to all of the rest
+Closer inspection reveals that they are have zeros for many of the transcripts, so I guess they had fragemented/low abundance libraries.
+```{r}
+expression.data <- make.OGGs(c("am", "bt", "ln", "lf"))[[1]]
+treatments <- tbl(my_db, "treatments") %>% as.data.frame()
+
+shhh <- capture.output(nmds.output <- dist(expression.data) %>% nmds())
+data.frame(id = rownames(expression.data), nmds.output$conf[[length(nmds.output$conf)]], stringsAsFactors = F) %>% left_join(treatments, by = "id") %>% 
+  ggplot(aes(X1,X2, shape = species)) + geom_point(aes(colour = treatment)) + geom_text_repel(aes(label = id), size=3.6) + xlab("NMDS 1") + ylab("NMDS 2")
+
+bad.samples <- c("lf1", "ln1", "ln12", "lf12")
+```
+
+#### Samples cluster sensibly following outlier removal
+```{r}
+expression.data <- make.OGGs(c("am", "bt", "ln", "lf"), bad.samples = bad.samples)[[1]]
+
+shhh <- capture.output(nmds.output <- dist(expression.data) %>% nmds())
+data.frame(id = rownames(expression.data), nmds.output$conf[[length(nmds.output$conf)]], stringsAsFactors = F) %>% left_join(treatments, by = "id")  %>% ggplot(aes(X1,X2)) + geom_point(aes(shape = species, colour = treatment)) + geom_text_repel(aes(label = id), size=3.6) + xlab("NMDS 1") + ylab("NMDS 2")
+
+# Check that everything is ok with the data, as judged by WGCNA package - yes it is
+goodSamplesGenes(expression.data)$allOK
+```
+
+
+
+## Testing whether gene expression is correlated across species
+
+Specifically, these tests ask if genes that are upregulated after queen pheromone treatment in one species are also up (or down) regulated in another. These tests used fold expression changes calcualted using ebseq, which omitted the four bad Lasius samples.
+
+#### Define function to retrieve fold-change expression data (calculated with ebseq) for genes that are each other's reciprocal best BLAST
+```{r}
+get.fc.for.pair.species <- function(species1, species2){
+  query <- 'SELECT rbb.X AS X_gene, rbb.Y AS Y_gene, ebseq_gene_X.PostFC AS X_fc, ebseq_gene_Y.PostFC AS Y_fc FROM ebseq_gene_X
+             JOIN
+  (SELECT Y2X.X, Y2X.Y  FROM Y2X
+  JOIN X2Y
+  ON Y2X.Y = X2Y.Y AND Y2X.X = X2Y.X  ) AS rbb
+  ON rbb.X = ebseq_gene_X.gene
+  JOIN ebseq_gene_Y
+  ON rbb.Y = ebseq_gene_Y.gene'
+  
+  query <- str_replace_all(query, "X", species1)
+  query <- str_replace_all(query, "Y", species2)
+  dbGetQuery(db, query)
+}
+```
+
+
+#### Make a table and plot of the correlations for each pair of species
+```{r fig.width=2.9, fig.height=2.54}
+species.combinations <- t(combn(c("am", "bt", "lf", "ln"), 2))
+rho <- numeric(nrow(species.combinations))
+p <- numeric(nrow(species.combinations))
+for(i in 1:nrow(species.combinations)){
+  fc.data <- get.fc.for.pair.species(species.combinations[i, 1], species.combinations[i,2])
+  results <- suppressWarnings(with(fc.data, cor.test(fc.data[,3], fc.data[,4], method="spearman"))) # Spearman's correlation
+  rho[i] <- results$estimate
+  p[i] <- results$p.value
+}
+
+species.combinations <- data.frame(sp1 = species.combinations[,1],
+                                   sp2 = species.combinations[,2],
+                                   rho = rho,
+                                   p = p,
+                                   sig = " ", stringsAsFactors = F)
+
+species.combinations$sig[species.combinations$p < 0.05] <- "*"
+species.combinations$sig[species.combinations$p < 0.001] <- "**"
+species.combinations$sig[species.combinations$p < 0.0001] <- "***"
+# Make a table
+species.combinations %>% mutate(rho = format(round(rho, 2), nsmall = 2)) %>% pander
+
+species.combinations %>% ggplot(aes(sp1, sp2, fill=rho)) + geom_tile(colour="white", size=4) + scale_fill_gradient2(name = "Corr", low = brewer.pal(9, "RdYlBu")[7], mid = "white", high = brewer.pal(9, "RdYlBu")[2]) + 
+  geom_text(aes(label = sig)) +
+  theme_bw() + theme(panel.grid = element_blank(), panel.border = element_blank(), axis.ticks = element_blank(), axis.text = element_text(face = "italic")) + xlab(NULL) + ylab(NULL) +
+  scale_x_discrete(labels = c("Apis\nmellifera", "Bombus\nterrestris", "Lasius\nflavus"), expand = c(0,0)) + 
+  scale_y_discrete(labels = c("Bombus\nterrestris", "Lasius\nflavus", "Lasius\nniger"), expand = c(0,0)) 
+```
+
+
+## Identifying genes that splice differentially following queen pheromone treatment
+
+Define a function to search for significantly alternatively spliced genes. We define these as genes that have at least two differentially expressed isoforms, where queen pheromone stimulates expresison of one isoform but surpresses expression of another
+```{r}
+find.alternatively.spliced.genes <- function(species){
+  
+  # Write a database query with 'X' as a placeholder for the species name
+  query <- 'SELECT isoforms_X.gene, isoforms_X.isoform, PostFC FROM isoforms_X
+JOIN
+             (SELECT gene, COUNT(*) FROM ebseq_padj_isoform_X 
+             JOIN isoforms_X
+             ON isoforms_X.isoform = ebseq_padj_isoform_X.isoform
+             GROUP BY gene
+             HAVING COUNT(*)>1 ) AS multiISO
+             ON multiIso.gene = isoforms_X.gene
+             JOIN ebseq_padj_isoform_X 
+             ON ebseq_padj_isoform_X.isoform = isoforms_X.isoform
+             ORDER BY isoforms_X.gene'
+  query <- str_replace_all(query, "X", species) # replace X with the species
+  Splice <- dbGetQuery(db, query) # run the query
+  
+  # Find the highest and lowest fold change for the isoforms of each gene
+  SpliceMin <- aggregate(Splice$PostFC, by=list(Splice$gene), FUN="min")
+  SpliceMax <- aggregate(Splice$PostFC, by=list(Splice$gene), FUN="max")
+  SpliceCompare <- merge(SpliceMin, SpliceMax, by = "Group.1")
+  colnames(SpliceCompare) <- c("gene", "min", "max")
+  
+  # Define diff-spliced genes as those with both elevated and repressed isoforms, when comparing control and pheromone-treated workers
+  output <- data.frame(gene = SpliceCompare$gene[SpliceCompare$min < 1 & SpliceCompare$max > 1], stringsAsFactors = F)
+  
+  # Add the Apis mellifera ortholog, from one-way BLAST, if it's a non-Apis species
+  if(species != "am"){
+    orthologs <- tbl(my_db, paste(species, "2am", sep = "")) %>% select(-evalue) %>% collect(n=Inf) %>% as.data.frame()
+    names(orthologs) <- c("gene", "Amel_ortholog")
+    output <- left_join(output, orthologs, by = "gene") 
+    output <- left_join(output, tbl(my_db, "bee_names") %>% rename(Amel_ortholog = gene), copy=T, by = "Amel_ortholog") 
+    output <- output %>% arrange(Amel_ortholog)
+  }
+  else output <- left_join(output, tbl(my_db, "bee_names"), by = "gene", copy = T) %>% arrange(gene)
+  
+  output[is.na(output)] <- " "
+  
+  left_join(output, SpliceCompare, by = "gene") 
+}
+```
+
+### Honey bees
+```{r}
+am.alt.splice <- find.alternatively.spliced.genes("am")
+pander(am.alt.splice, split.cell = 40, split.table = Inf)
+```
+
+### _L. flavus_
+```{r}
+lf.alt.splice<- find.alternatively.spliced.genes("lf")
+pander(lf.alt.splice, split.cell = 40, split.table = Inf)
+```
+
+### _L. niger_
+```{r}
+ln.alt.splice <- find.alternatively.spliced.genes("ln")
+pander(ln.alt.splice, split.cell = 40, split.table = Inf)
+```
+
+### Bumblebees
+```{r}
+find.alternatively.spliced.genes("bt")  # There are none for B. terrestris
+```
+
+<!-- ## Inspect the GO terms associated with each of the differentially-spliced genes -->
+<!-- ```{r} -->
+<!-- go.analysis.splicing <- function(splice.results, ontology){ -->
+
+<!--   # Only include genes where we know the ortholog in Apis -->
+<!--   if("Amel_ortholog" %in% names(splice.results)) splice.results <- splice.results %>% -->
+<!--       filter(!is.na(Amel_ortholog)) %>%  -->
+<!--       select(-gene) %>% rename(gene = Amel_ortholog) -->
+
+<!--   go.terms <- tbl(my_db, "bee_go") %>% filter(gene %in% splice.results$gene) %>% collect(n = Inf) %>% as.data.frame() -->
+
+<!--   output <- left_join(go.terms, tbl(my_db, "go_meanings"), by = "GO", copy = T)  -->
+<!--   output <- cbind(left_join(data.frame(gene = output$gene, stringsAsFactors = F),  -->
+<!--                             tbl(my_db, "bee_names"), copy = T, by = "gene"), -->
+<!--                        output[,-1]) -->
+<!--   if(ontology == "BP") output <- output %>% filter(ontology == "BP") -->
+<!--   if(ontology == "CC") output <- output %>% filter(ontology == "CC") -->
+<!--   if(ontology == "MF") output <- output %>% filter(ontology == "MF") -->
+<!--   output %>% select(-ontology)  -->
+<!-- } -->
+
+<!-- go.analysis.splicing(am.alt.splice, "BP") -->
+<!-- go.analysis.splicing(lf.alt.splice, "BP") -->
+<!-- go.analysis.splicing(ln.alt.splice, "BP") -->
+<!-- ``` -->
+
+## Gene co-expression network analysis
+
+Define a series of functions for gene co-expression network analysis
+```{r}
+# This function using the ComBat function from the package 'sva' to remove variance in gene expression
+# that is due to colony and species, allowing us to detect variance due to queen pheromone treatment.
+# The use of ComBat in this fashion follows recommendations from the author of the WGCNA package. 
+remove.effects.combat <- function(expression.data){
+  sampleIDs <- rownames(expression.data)
+  ids <- with(treatments[match(sampleIDs, treatments$id), ], 
+              data.frame(
+                id = sampleIDs,
+                species = species,
+                treatment = treatment,
+                colony = paste(species, colony, sep = "")))
+  
+  modcombat <- model.matrix(~as.factor(treatment), data=ids)
+  shh <- capture.output(expression.data <- ComBat(dat=t(expression.data), batch=ids$species, mod=modcombat, par.prior=T))
+  shh <- capture.output(expression.data <- t(ComBat(dat=expression.data, batch=ids$colony, mod=modcombat, par.prior=T)))
+  list(expression.data, ids)
+}
+
+
+# Build a gene coexpresison network using WGCNA package
+build.network <- function(expression.data.list){
+  # Pick the soft thresholding power that gives a model fit of R^2 > 0.8 for the scale-free topology model
+  # Assigning the output to 'shh' prevents the function printing so much to the console
+  shh <- capture.output(soft.power <- pickSoftThreshold(expression.data.list[[1]], RsquaredCut = 0.8, verbose = 0, powerVector = 1:30))
+  # Use this power to generate a gene co-expression network, using the default settings
+  shh <- capture.output(network <- blockwiseModules(expression.data.list[[1]], power = soft.power$powerEstimate, verbose = 0))
+  list(network, expression.data.list[[2]])
+}
+
+
+# By default, WGCNA gives the transcriptional modules random names like 'turqoise' or 'darkred'. I think it's more useful to define the biggest module as 'Module 1', the second biggest as 'Module 2', etc
+# I use the label 'Module 0' for genes that were not assigned to a module
+convert.module.colors.to.names <- function(network){
+  module.sizes <- table(network[[1]]$colors) %>% sort %>% rev
+  module.sizes <- c(module.sizes[names(module.sizes) == "grey"], module.sizes[names(module.sizes) != "grey"])
+  module.mappings <- data.frame(color = names(module.sizes), 
+                                new.name = paste("Module", 0:(length(module.sizes)-1)), stringsAsFactors = F)
+  network[[1]]$colors <- module.mappings$new.name[match(network[[1]]$colors, module.mappings$color)]
+  names(network[[1]]$MEs) <- gsub("ME", "", names(network[[1]]$MEs))
+  names(network[[1]]$MEs) <- module.mappings$new.name[match(names(network[[1]]$MEs), module.mappings$color)]
+  network
+}
+
+
+# Rearrange the data in a handy format for stats and plotting, and remove the 'Module 0', the un-assigned genes
+rearrange.eigengene.data <- function(network.list){
+  cbind(network.list[[2]], network.list[[1]]$MEs) %>% 
+    gather(Module, Eigengene, starts_with("Module")) %>% filter(Module != "Module 0") %>%
+    rename(Species = species, Treatment = treatment) %>% arrange(Species, Treatment, colony, Module)
+} 
+
+
+# Make a plot of the module eigengenes, split by species, module and treatment
+treatments.network.plot <- function(dat){ 
+  dat %>% ggplot(aes(Species, Eigengene, fill = Treatment)) + 
+    geom_hline(yintercept = 0, colour="grey", linetype=2) + 
+    geom_boxplot() + 
+    facet_wrap(~Module) + 
+    xlab(NULL) + 
+    scale_x_discrete(labels = c("Apis\nmellifera", "Bombus\nterrestris", "Lasius\nflavus", "Lasius\nniger")) + theme_bw() + 
+    theme(legend.position=c(0.9,0.1), panel.grid = element_blank(),strip.background = element_blank(), axis.text = element_text(face = "italic"))
+}
+
+
+# Run a model selection analysis on each module. The full linear model has eigengene as the response variable, and treatment, species and treatment:species as predictors. We rank the 5 possible models using their AIC scores, and test which provides the best fit to the data (the 'delta' and 'weight' parameters reveal the difference in explantory power)
+run.stats <- function(dat){
+  
+  do.one.module <- function(module, dat){
+    options(na.action = "na.fail") # need to set this option when running dredge()
+    full.model <- lm(Eigengene ~ Treatment * Species, data = dat[dat$Module == paste("Module", module), ])
+    output <- suppressMessages(dredge(full.model)) # compare full model and the four possible simpler models
+    options(na.action = "na.omit") # set it back to default
+    cbind(Module = module, output %>% as.data.frame()) # Add the module name to the results
+  }
+  stats <- do.call("rbind", # Run model selection on every module
+                   lapply(1:length(unique(eigen.data$Module)), do.one.module, eigen.data))
+
+  stats[,names(stats) %in% c("logLik", "AICc", "delta", "weight")] <- format(round(stats[,names(stats) %in% c("logLik", "AICc", "delta", "weight")], 2), nsmall = 2) # rounding
+  rownames(stats) <- NULL
+  stats <- stats[,-2] # Remove the intercept column
+  stats$Module[duplicated(stats$Module)] <- " "
+  model <- rep("Null model")
+  model[stats$Species == "+"] <- "~ Species"
+  model[stats$Treatment == "+"] <- "~ Treatment"
+  model[stats$Species == "+" & stats$Treatment == "+"] <- "~ Species x Treatment"
+  model[is.na(model)] <- "Null model"
+  stats <- with(stats, data.frame(Module, Model = model, stats[,names(stats) %in% c("logLik", "AICc", "delta", "weight")]))
+  stats
+}
+```
+
+### Make the gene co-expression network using the set of orthologous genes for all species
+```{r results="hide", warning=FALSE}
+# The 4 bad samples get removed, then we find the orthologous genes, the data are scaled with ComBat, and then we build the network using the lowest soft-thresholding power that gives at least R^2 > 0.8 model fit
+OGGs <- make.OGGs(c("am", "bt", "ln", "lf"), bad.samples = bad.samples)
+network <- OGGs[[1]] %>%
+  remove.effects.combat() %>% 
+  build.network() %>%
+  convert.module.colors.to.names()
+eigen.data <- network %>% rearrange.eigengene.data
+```
+
+### Simple statistics about the network
+Here is the number of orthologous genes that form the network:
+```{r}
+length(network[[1]]$colors)
+```
+
+Here is the number and size of modules in the network - module 0 is the unassigned genes
+```{r}
+table(network[[1]]$colors) 
+```
+
+
+### Make a plot of the module eigengenes
+```{r}
+eigen.data %>% treatments.network.plot
+```
+
+### Run model selection analysis to test for treatment and species effects on eigengenes
+```{r}
+run.stats(eigen.data) %>% pander
+```
+
+### Plot the correlations between all modules and the pheromone treatment
+```{r echo = FALSE}
+meta.module.plot <- function(network){
+ 
+  module.order <- (table(network[[1]]$colors) %>% sort %>% rev %>% as.data.frame() %>% filter(Var1 != "Module 0"))[,1] %>% as.character()
+  MET <- network[[1]]$MEs 
+  MET <- data.frame(QP = (network[[2]]$treatment %>% as.numeric())-1, MET) %>% select(-Module.0)
+  names(MET) <- gsub("[.]", " ", names(MET))
+  cluster <- (1 - cor(MET)) %>% as.dist() %>% hclust()
+  heat.map.data <- cor(MET) %>% melt %>% 
+    mutate(Var1 = factor(Var1, levels = cluster$labels),
+           Var2 = factor(Var2, levels = cluster$labels)) %>% 
+    rename(Corr = value)
+  heat.map <- heat.map.data %>% ggplot(aes(Var1, Var2, fill = Corr)) + geom_tile() + 
+    scale_fill_gradient2(low = brewer.pal(9, "RdBu")[8], mid = "white", high = brewer.pal(9, "RdBu")[2]) + xlab(NULL) + ylab(NULL) + theme_bw() + theme(panel.border = element_blank(), panel.grid = element_blank())
+  dendrogram <- ggdendrogram(cluster) + theme(axis.text.x = element_blank(), axis.text.y = element_blank())
+  p1 <- grid.arrange(dendrogram, heat.map)
+  invisible(p1)
+}
+
+meta.module.plot(network)
+```
+
+
+
+## GO term enrichment
+First, define some functions we will need. See also the R script "Script to set up for GO analyses.R", which was used to make the object gene_set_collection.RData, following instructions for making a GO annotation for a non-model organism at http://bioconductor.org/packages/2.11/bioc/vignettes/GOstats/inst/doc/GOstatsForUnsupportedOrganisms.pdf.
+```{r}
+suppressMessages(library(GOstats)) # Note - because of conflicts between GOstats, RSQLite and dplyr, use caution after loading this
+
+GO.enrichment <- function(enriched.genes, gene.universe, ontology){
+  params <- GSEAGOHyperGParams(name="Luke's Params",
+                               geneSetCollection = gene_set_collection,
+                               geneIds = enriched.genes,
+                               universeGeneIds = gene.universe,
+                               ontology = ontology, # Can be BP, MF, or CC
+                               pvalueCutoff = 0.05,
+                               conditional = FALSE, # don't condition on the GO structure
+                               testDirection = "over") # Look for over-represented GO terms, not under
+  Over <- hyperGTest(params)
+  summary(Over) %>% mutate(Pvalue = format(round(Pvalue, 5), nsmall = 3),
+                           OddsRatio = format(round(OddsRatio, 3), nsmall = 3),
+                           ExpCount = format(round(ExpCount, 3), nsmall = 3))
+}
+
+genes.in.module <- function(module.number){
+  OGGs[[2]]$am[network[[1]]$colors == paste("Module", module.number)]
+}
+
+# Load the gene set collection object needed for the GO tests
+load("data/gene_set_collection.RData")
+```
+
+### GO term enrichment for differentially spliced genes
+
+#### Honeybees
+```{r}
+gene.universe.apis <- (tbl(my_db, "rsem_am") %>% collect(n=Inf) %>% as.data.frame())$gene
+GO.enrichment(am.alt.splice$gene, gene.universe.apis, ontology = "BP") %>%
+  pander(split.cell = 40, split.table = Inf)
+```
+
+#### _Lasius flavus_
+```{r}
+filter <- dplyr::filter
+rename <- dplyr::rename
+select <- dplyr::select
+# The gene universe is all L. flavus genes for which we found a BLAST hit in Apis mellifera
+gene.universe.flavus <- (left_join(tbl(my_db, "rsem_lf") %>% dplyr::select(gene), 
+                                   tbl(my_db, "lf2am") %>% dplyr::rename(gene = lf), by = "gene") %>% 
+                           dplyr::select(am) %>% filter(!is.na(am)) %>% as.data.frame())[,1] %>% unique
+alt.spliced.flavus <- (tbl(my_db, "lf2am") %>% filter(lf %in% lf.alt.splice$gene) %>% dplyr::select(am)%>% filter(!is.na(am)) %>% as.data.frame())[,1]
+GO.enrichment(alt.spliced.flavus, gene.universe.flavus, ontology = "BP") %>%
+  pander(split.cell = 40, split.table = Inf)
+```
+
+#### _Lasius niger_
+```{r}
+# The gene universe is all L. niger genes for which we found a BLAST hit in Apis mellifera
+gene.universe.niger <- (left_join(tbl(my_db, "rsem_ln") %>% dplyr::select(gene),
+                                  tbl(my_db, "ln2am") %>% rename(gene = ln), by = "gene") %>% 
+                          dplyr::select(am) %>% filter(!is.na(am)) %>% as.data.frame())[,1] %>% unique
+alt.spliced.niger <- (tbl(my_db, "ln2am") %>% filter(ln %in% ln.alt.splice$gene) %>% dplyr::select(am)%>% filter(!is.na(am)) %>% as.data.frame())[,1]
+GO.enrichment(alt.spliced.niger, gene.universe.niger, ontology = "BP") %>%
+  pander(split.cell = 40, split.table = Inf)
+```
+
+
+### GO term enrichment for transcriptional modules
+```{r echo=FALSE}
+# For the module GO tests, the gene universe is genes that are present in the network
+gene.universe <- OGGs[[2]]$am 
+```
+
+
+#### Enriched GO terms in module 1
+```{r echo=FALSE}
+GO.enrichment(genes.in.module(1), gene.universe, ontology = "BP") %>%
+  pander(split.cell = 40, split.table = Inf)
+```
+
+#### Enriched GO terms in module 2
+```{r echo=FALSE}
+GO.enrichment(genes.in.module(2), gene.universe, ontology = "BP") %>%
+  pander(split.cell = 40, split.table = Inf)
+```
+
+#### Enriched GO terms in module 3
+```{r echo=FALSE}
+GO.enrichment(genes.in.module(3), gene.universe, ontology = "BP") %>%
+  pander(split.cell = 40, split.table = Inf)
+```
+
+#### Enriched GO terms in module 4
+```{r echo=FALSE}
+GO.enrichment(genes.in.module(4), gene.universe, ontology = "BP") %>%
+  pander(split.cell = 40, split.table = Inf)
+```
+
+#### Enriched GO terms in module 5
+```{r echo=FALSE}
+GO.enrichment(genes.in.module(5), gene.universe, ontology = "BP") %>%
+  pander(split.cell = 40, split.table = Inf)
+```
+
+#### Enriched GO terms in module 6
+```{r echo=FALSE}
+GO.enrichment(genes.in.module(6), gene.universe, ontology = "BP") %>%
+  pander(split.cell = 40, split.table = Inf)
+```
+
+#### Enriched GO terms in module 7
+```{r echo=FALSE}
+GO.enrichment(genes.in.module(7), gene.universe, ontology = "BP") %>%
+  pander(split.cell = 40, split.table = Inf)
+```
+
+
+<!-- # FIX THIS -->
+<!-- ### Now plot the network to look at the modules that we identified -->
+<!-- # ```{r} -->
+<!-- # module.cluster.plot <- function(network){ -->
+<!-- #   moduleColors <- labels2colors(c(0,1:max(network$colors))) -->
+<!-- #   sizeGrWindow(12,6) -->
+<!-- #   # Use the layout function for more involved screen sectioning -->
+<!-- #   layout(matrix(1:2, 2), heights = c(0.8, 0.2), widths = c(1,1)) -->
+<!-- #   #layout.show(4); -->
+<!-- #    -->
+<!-- #   # Plot the consensus network dendrogram and the module colors underneath for each block -->
+<!-- #   plotDendroAndColors(network$dendrograms[[1]], moduleColors[1 + network$colors], -->
+<!-- #                       "Module colors", -->
+<!-- #                       main = "Gene dendrogram and module colors", -->
+<!-- #                       dendroLabels = FALSE, hang = 0.03, -->
+<!-- #                       addGuide = TRUE, guideHang = 0.05, -->
+<!-- #                       setLayout = FALSE) -->
+<!-- # } -->
+<!-- #  -->
+<!-- # module.cluster.plot(network[[1]]) -->
+<!-- ``` -->
+
