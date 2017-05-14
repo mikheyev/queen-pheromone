@@ -24,6 +24,7 @@ library(ggrepel) # for plots
 library(ggdendro) # for plots
 library(gridExtra) # for plots
 library(RColorBrewer) # for plots
+library(gplots) # Venn diagram
 library(ecodist) # for nmds
 library(MuMIn) # for model comparison
 library(sva) # for ComBat function; install via source("https://bioconductor.org/biocLite.R"); biocLite("sva")
@@ -113,8 +114,8 @@ rbbs <- rbbs[, to.keep]
 ```
 
 
-#### This plot illustrates that 4 of the _Lasius_ ant samples are highly different to all of the rest
-Closer inspection reveals that they are have zeros for many of the transcripts, so I guess they had fragemented/low abundance libraries.
+#### This plot illustrates that 4 of the _Lasius_ samples are highly different to all of the rest
+Closer inspection reveals that they are have zeros for many of the transcripts, so perhaps they had fragemented/low abundance libraries.
 ```{r}
 expression.data <- make.OGGs(c("am", "bt", "ln", "lf"))[[1]]
 treatments <- tbl(my_db, "treatments") %>% as.data.frame()
@@ -141,7 +142,7 @@ goodSamplesGenes(expression.data)$allOK
 
 ## Testing whether gene expression is correlated across species
 
-##### Specifically, these tests ask if genes that are upregulated after queen pheromone treatment in one species are also up (or down) regulated in another. These tests used fold expression changes calcualted using ebseq, which omitted the four bad Lasius samples.
+Specifically, these tests ask if genes that are up- (or down-) regulated in the queen pheromone treatment in one species are also up (or down) regulated in another. These tests used fold expression changes calculated using ebseq, after omitting the four irregular Lasius samples.
 
 #### Define function to retrieve fold-change expression data (calculated with ebseq) for genes that are each other's reciprocal best BLAST
 ```{r}
@@ -161,41 +162,39 @@ get.fc.for.pair.species <- function(species1, species2){
 }
 ```
 
-### _L. niger vs. L. flavus_ - positive correlation
+
+#### Make a table and plot of the correlations for each pair of species
 ```{r}
-l2l <- get.fc.for.pair.species("lf", "ln")
-with(l2l, cor.test(lf_fc, ln_fc, method="spearman"))
+species.combinations <- t(combn(c("am", "bt", "lf", "ln"), 2))
+rho <- numeric(nrow(species.combinations))
+p <- numeric(nrow(species.combinations))
+for(i in 1:nrow(species.combinations)){
+  fc.data <- get.fc.for.pair.species(species.combinations[i, 1], species.combinations[i,2])
+  fc.data[,3:4] <- fc.data[,3:4] %>% log10 # Log the fold changes
+  results <- suppressWarnings(with(fc.data, cor.test(fc.data[,3], fc.data[,4], method="spearman"))) # Spearman's correlation
+  rho[i] <- results$estimate
+  p[i] <- results$p.value
+}
+
+species.combinations <- data.frame(sp1 = species.combinations[,1],
+                                   sp2 = species.combinations[,2],
+                                   rho = rho,
+                                   p = p,
+                                   sig = " ", stringsAsFactors = F)
+
+species.combinations$sig[species.combinations$p < 0.05] <- "*"
+species.combinations$sig[species.combinations$p < 0.01] <- "**"
+species.combinations$sig[species.combinations$p < 0.0001] <- "***"
+# Make a table
+species.combinations %>% mutate(rho = format(round(rho, 2), nsmall = 2)) %>% pander
+
+species.combinations %>% ggplot(aes(sp1, sp2, fill=rho)) + geom_tile(colour="white", size=4) + scale_fill_gradient2(name = "Corr", low = brewer.pal(9, "RdYlBu")[7], mid = "white", high = brewer.pal(9, "RdYlBu")[2]) + 
+  geom_text(aes(label = sig)) +
+  theme_bw() + theme(panel.grid = element_blank(), panel.border = element_blank(), axis.ticks = element_blank(), axis.text = element_text(face = "italic")) + xlab(NULL) + ylab(NULL) +
+  scale_x_discrete(labels = c("Apis\nmellifera", "Bombus\nterrestris", "Lasius\nflavus"), expand = c(0,0)) + 
+  scale_y_discrete(labels = c("Bombus\nterrestris", "Lasius\nflavus", "Lasius\nniger"), expand = c(0,0)) 
 ```
 
-### _L. niger vs._ bumblebees - no correlation
-```{r}
-l2b <- get.fc.for.pair.species("ln", "bt")
-with(l2b, cor.test(ln_fc, bt_fc,method="s"))
-```
-
-### _L. niger vs._ honey bees - negative correlation
-```{r}
-l2a <- get.fc.for.pair.species("ln", "am")
-cor.test(l2a$ln_fc, l2a$am_fc, method="spearman")
-```
-
-### _L. flavus vs._ bumblebees - negative correlation
-```{r}
-l2b <- get.fc.for.pair.species("lf", "bt")
-with(l2b, cor.test(lf_fc, bt_fc,method="spearman"))
-```
-
-### _L. flavus vs._ honey bees - negative correlation
-```{r}
-l2a <- get.fc.for.pair.species("lf", "am")
-with(l2a, cor.test(lf_fc, am_fc, method="spearman"))
-```
-
-### Bumblebees _vs._ honey bees - no correlation
-```{r}
-b2a <- get.fc.for.pair.species("bt", "am")
-with(b2a, cor.test(bt_fc, am_fc, method="spearman"))
-```
 
 ## Identifying genes that splice differentially following queen pheromone treatment
 
@@ -239,32 +238,40 @@ JOIN
   
   output[is.na(output)] <- " "
   
+  # Remove the 'isoform X' part from the gene name, so it gives the name of the gene not the isoform
+  output$name <- unlist(lapply(strsplit(output$name, split = " isoform "), function(x) x[1]))
+  
   left_join(output, SpliceCompare, by = "gene") 
 }
 ```
 
-### Honey bees
+### Genes showing pheromone-induced alternative splicing in _A. mellifera_
 ```{r}
 am.alt.splice <- find.alternatively.spliced.genes("am")
 pander(am.alt.splice, split.cell = 40, split.table = Inf)
 ```
 
-### _L. flavus_
+### Genes showing pheromone-induced alternative splicing in _L. flavus_
 ```{r}
 lf.alt.splice<- find.alternatively.spliced.genes("lf")
 pander(lf.alt.splice, split.cell = 40, split.table = Inf)
 ```
 
-### _L. niger_
+### Genes showing pheromone-induced alternative splicing in _L. niger_
 ```{r}
 ln.alt.splice <- find.alternatively.spliced.genes("ln")
 pander(ln.alt.splice, split.cell = 40, split.table = Inf)
 ```
 
-### Bumblebees
 ```{r}
 find.alternatively.spliced.genes("bt")  # There are none for B. terrestris
 ```
+
+### There is some overlap of pheromone-sensitive alternatively-spliced genes
+```{r}
+venn(list(Apis = am.alt.splice$name,`L. flavus` = lf.alt.splice$name,`L. niger` = ln.alt.splice$name))
+```
+
 
 <!-- ## Inspect the GO terms associated with each of the differentially-spliced genes -->
 <!-- ```{r} -->
@@ -294,7 +301,7 @@ find.alternatively.spliced.genes("bt")  # There are none for B. terrestris
 
 ## Gene co-expression network analysis
 
-Define a series of functions for gene co-expression network analysis
+First, we define a series of functions for gene co-expression network analysis.
 ```{r}
 # This function using the ComBat function from the package 'sva' to remove variance in gene expression
 # that is due to colony and species, allowing us to detect variance due to queen pheromone treatment.
@@ -319,9 +326,12 @@ remove.effects.combat <- function(expression.data){
 build.network <- function(expression.data.list){
   # Pick the soft thresholding power that gives a model fit of R^2 > 0.8 for the scale-free topology model
   # Assigning the output to 'shh' prevents the function printing so much to the console
-  shh <- capture.output(soft.power <- pickSoftThreshold(expression.data.list[[1]], RsquaredCut = 0.8, verbose = 0, powerVector = 1:30))
+  soft.power <- pickSoftThreshold(expression.data.list[[1]], RsquaredCut = 0.8, verbose = 0, powerVector = 1:30)
   # Use this power to generate a gene co-expression network, using the default settings
-  shh <- capture.output(network <- blockwiseModules(expression.data.list[[1]], power = soft.power$powerEstimate, verbose = 0))
+  network <- blockwiseModules(expression.data.list[[1]], 
+                              power = soft.power$powerEstimate,
+                              minModuleSize = 30,
+                              verbose = 0)
   list(network, expression.data.list[[2]])
 }
 
@@ -356,7 +366,7 @@ treatments.network.plot <- function(dat){
     facet_wrap(~Module) + 
     xlab(NULL) + 
     scale_x_discrete(labels = c("Apis\nmellifera", "Bombus\nterrestris", "Lasius\nflavus", "Lasius\nniger")) + theme_bw() + 
-    theme(legend.position=c(0.9,0.1), panel.grid = element_blank(),strip.background = element_blank())
+    theme(legend.position=c(0.9,0.1), panel.grid = element_blank(), strip.background = element_blank(), axis.text.x = element_text(face = "italic"))
 }
 
 
@@ -370,6 +380,7 @@ run.stats <- function(dat){
     options(na.action = "na.omit") # set it back to default
     cbind(Module = module, output %>% as.data.frame()) # Add the module name to the results
   }
+  
   stats <- do.call("rbind", # Run model selection on every module
                    lapply(1:length(unique(eigen.data$Module)), do.one.module, eigen.data))
 
@@ -380,14 +391,15 @@ run.stats <- function(dat){
   model <- rep("Null model")
   model[stats$Species == "+"] <- "~ Species"
   model[stats$Treatment == "+"] <- "~ Treatment"
-  model[stats$Species == "+" & stats$Treatment == "+"] <- "~ Species x Treatment"
+  model[stats$Species == "+" & stats$Treatment == "+"] <- "~ Species + Treatment"
+    model[stats$`Species:Treatment` == "+"] <- "~ Species x Treatment"
   model[is.na(model)] <- "Null model"
   stats <- with(stats, data.frame(Module, Model = model, stats[,names(stats) %in% c("logLik", "AICc", "delta", "weight")]))
   stats
 }
 ```
 
-### Make the gene co-expression network using the set of orthologous genes for all species
+### Make the gene co-expression network, using the set of orthologous genes for all 4 species
 ```{r results="hide", warning=FALSE}
 # The 4 bad samples get removed, then we find the orthologous genes, the data are scaled with ComBat, and then we build the network using the lowest soft-thresholding power that gives at least R^2 > 0.8 model fit
 OGGs <- make.OGGs(c("am", "bt", "ln", "lf"), bad.samples = bad.samples)
@@ -424,18 +436,20 @@ run.stats(eigen.data) %>% pander
 ```{r echo = FALSE}
 meta.module.plot <- function(network){
  
-  module.order <- (table(network[[1]]$colors) %>% sort %>% rev %>% as.data.frame() %>% filter(Var1 != "Module 0"))[,1] %>% as.character()
   MET <- network[[1]]$MEs 
   MET <- data.frame(QP = (network[[2]]$treatment %>% as.numeric())-1, MET) %>% select(-Module.0)
   names(MET) <- gsub("[.]", " ", names(MET))
   cluster <- (1 - cor(MET)) %>% as.dist() %>% hclust()
+  ordering <- cluster$labels[cluster$order]
   heat.map.data <- cor(MET) %>% melt %>% 
-    mutate(Var1 = factor(Var1, levels = cluster$labels),
-           Var2 = factor(Var2, levels = cluster$labels)) %>% 
+    mutate(Var1 = factor(Var1, levels = ordering),
+           Var2 = factor(Var2, levels = ordering)) %>% 
     rename(Corr = value)
   heat.map <- heat.map.data %>% ggplot(aes(Var1, Var2, fill = Corr)) + geom_tile() + 
     scale_fill_gradient2(low = brewer.pal(9, "RdBu")[8], mid = "white", high = brewer.pal(9, "RdBu")[2]) + xlab(NULL) + ylab(NULL) + theme_bw() + theme(panel.border = element_blank(), panel.grid = element_blank())
+ 
   dendrogram <- ggdendrogram(cluster) + theme(axis.text.x = element_blank(), axis.text.y = element_blank())
+  
   p1 <- grid.arrange(dendrogram, heat.map)
   invisible(p1)
 }
@@ -460,6 +474,7 @@ GO.enrichment <- function(enriched.genes, gene.universe, ontology){
                                conditional = FALSE, # don't condition on the GO structure
                                testDirection = "over") # Look for over-represented GO terms, not under
   Over <- hyperGTest(params)
+  
   summary(Over) %>% mutate(Pvalue = format(round(Pvalue, 5), nsmall = 3),
                            OddsRatio = format(round(OddsRatio, 3), nsmall = 3),
                            ExpCount = format(round(ExpCount, 3), nsmall = 3))
@@ -473,89 +488,195 @@ genes.in.module <- function(module.number){
 load("data/gene_set_collection.RData")
 ```
 
-### GO term enrichment for differentially spliced genes
+## GO term enrichment for differentially _expressed_ genes
+There are only two differentially expressed genes for B. terrestris, so it is only meaningful to test for enriched GO terms in the other three species.
 
-#### Honeybees
+### Enriched GO terms for differentially expressed genes in _A. mellifera_
 ```{r}
-gene.universe.apis <- (tbl(my_db, "rsem_am") %>% collect(n=Inf) %>% as.data.frame())$gene
-GO.enrichment(am.alt.splice$gene, gene.universe.apis, ontology = "BP") %>%
+gene.universe.apis <- (tbl(my_db, "rsem_am") %>% 
+                         as.data.frame())$gene
+diff.expressed.apis <- (tbl(my_db, "ebseq_padj_gene_am") %>% dplyr::select(gene) %>% as.data.frame())[,1]
+GO.enrichment(diff.expressed.apis, gene.universe.apis, ontology = "BP") %>%
   pander(split.cell = 40, split.table = Inf)
 ```
 
-#### _Lasius flavus_
+
+### Enriched GO terms for differentially expressed genes in _L. flavus_
 ```{r}
-filter <- dplyr::filter
-rename <- dplyr::rename
-select <- dplyr::select
 # The gene universe is all L. flavus genes for which we found a BLAST hit in Apis mellifera
-gene.universe.flavus <- (left_join(tbl(my_db, "rsem_lf") %>% dplyr::select(gene), 
+gene.universe.flavus <- (left_join(tbl(my_db, "rsem_lf") %>% 
+                                     dplyr::select(gene), 
+                                   tbl(my_db, "lf2am") %>% 
+                                     dplyr::rename(gene = lf), by = "gene") %>% 
+                           dplyr::select(am) %>% 
+                           filter(!is.na(am)) %>% 
+                           as.data.frame())[,1] %>% unique
+# The test set is all differentially expressed genes in L. flavus for which we found a BLAST hit in Apis
+diff.expressed.flavus <- (left_join(tbl(my_db, "ebseq_padj_gene_lf") %>% dplyr::select(gene), 
                                    tbl(my_db, "lf2am") %>% dplyr::rename(gene = lf), by = "gene") %>% 
                            dplyr::select(am) %>% filter(!is.na(am)) %>% as.data.frame())[,1] %>% unique
-alt.spliced.flavus <- (tbl(my_db, "lf2am") %>% filter(lf %in% lf.alt.splice$gene) %>% dplyr::select(am)%>% filter(!is.na(am)) %>% as.data.frame())[,1]
+GO.enrichment(diff.expressed.flavus, gene.universe.flavus, ontology = "BP") %>%
+  pander(split.cell = 40, split.table = Inf)
+```
+
+### Enriched GO terms for differentially expressed genes in _L. niger
+```{r}
+# The gene universe is all L. niger genes for which we found a BLAST hit in Apis mellifera
+gene.universe.niger <- (left_join(tbl(my_db, "rsem_ln") %>% 
+                                    dplyr::select(gene), 
+                                   tbl(my_db, "ln2am") %>% 
+                                    dplyr::rename(gene = ln), by = "gene") %>% 
+                           dplyr::select(am) %>% 
+                          filter(!is.na(am)) %>% 
+                          as.data.frame())[,1] %>% unique
+# The test set is all differentially expressed genes in L. niger for which we found a BLAST hit in Apis
+diff.expressed.niger <- (left_join(tbl(my_db, "ebseq_padj_gene_ln") %>% dplyr::select(gene), 
+                                   tbl(my_db, "ln2am") %>% dplyr::rename(gene = ln), by = "gene") %>% 
+                           dplyr::select(am) %>% filter(!is.na(am)) %>% as.data.frame())[,1] %>% unique
+GO.enrichment(diff.expressed.niger, gene.universe.niger, ontology = "BP") %>%
+  pander(split.cell = 40, split.table = Inf)
+```
+
+## Find the number of intersecting differentially-expressed orthologous genes across species
+Bombus is omitted because there were only 2 differentially expressed genes and both are absent in the other three species.
+```{r}
+overlap.counts <- table(c(diff.expressed.apis, diff.expressed.flavus, diff.expressed.niger))
+overlap.thrice <- names(overlap.counts[overlap.counts == 3])
+
+overlap.thrice <- tbl(my_db, "bee_names") %>% dplyr::filter(gene == overlap.thrice) %>% 
+  mutate(Species = "Apis and both Lasius") %>%  as.data.frame()
+
+overlap.counts <- table(c(diff.expressed.flavus, diff.expressed.apis))
+overlap.apis.flavus <- names(overlap.counts[overlap.counts==2])
+overlap.apis.flavus <- tbl(my_db, "bee_names") %>% dplyr::filter(gene %in% overlap.apis.flavus) %>% 
+  mutate(Species = "Apis and L. flavus")%>% as.data.frame()
+
+overlap.counts <- table(c(diff.expressed.niger, diff.expressed.apis))
+overlap.apis.niger <- names(overlap.counts[overlap.counts==2])
+overlap.apis.niger <- tbl(my_db, "bee_names") %>% dplyr::filter(gene %in% overlap.apis.niger) %>%
+  mutate(Species = "Apis and L. niger") %>% as.data.frame()
+
+overlap.counts <- table(c(diff.expressed.flavus, diff.expressed.niger))
+overlap.lasius <- names(overlap.counts[overlap.counts==2])
+overlap.lasius <- tbl(my_db, "bee_names") %>% dplyr::filter(gene %in% overlap.lasius) %>% 
+  mutate(Species = "L. flavus and L. niger") %>% as.data.frame()
+
+all.overlaps <- rbind(overlap.thrice, overlap.apis.flavus, overlap.apis.niger, overlap.lasius)
+all.overlaps <- all.overlaps[!duplicated(all.overlaps$name), ]
+names(all.overlaps)[1:2] <- c("Gene", "Name")
+rownames(all.overlaps) <- NULL
+pander(all.overlaps, split.cell = 40, split.table = Inf)
+```
+
+### Venn diagram showing number of over-lapping differentially expressed genes
+```{r echo = FALSE}
+venn(list(Apis = diff.expressed.apis,`L. flavus` = diff.expressed.flavus,`L. niger` = diff.expressed.niger))
+```
+
+
+
+### GO term enrichment for genes that are affected by queen pheromone in 2 or 3 species
+```{r}
+GO.enrichment(all.overlaps$Gene %>% unique, gene.universe.apis, ontology = "BP") %>%
+  pander(split.cell = 40, split.table = Inf)
+```
+
+
+## GO term enrichment for differentially spliced genes
+
+### GO terms for _A. mellifera_ genes showing pheromone-modulated alternative splicing
+```{r}
+# The gene universe is defined as all genes that have 2 or more isoforms. It would be anti-conservative if we instead included all genes, not just that are alternatively spliced
+gene.universe.apis.splicing <- (tbl(my_db, "isoforms_am") %>% 
+                                  group_by(gene) %>% 
+                                  summarise(nIsoforms = n()) %>% filter(nIsoforms > 1) %>% 
+                                  as.data.frame() %>% 
+                                  dplyr::select(gene) %>% as.data.frame())[,1]
+
+GO.enrichment(am.alt.splice$gene, gene.universe.apis.splicing, ontology = "BP") %>%
+  pander(split.cell = 40, split.table = Inf)
+```
+
+### GO terms for _L. flavus_ genes showing pheromone-modulated alternative splicing
+```{r}
+# For flavus and niger, we additionally have to find the best BLAST Apis genes when constructing the gene lists
+gene.universe.flavus.splicing <- (tbl(my_db, "isoforms_lf") %>% 
+                                  group_by(gene) %>% 
+                                  summarise(nIsoforms = n()) %>% filter(nIsoforms > 1) %>% 
+                                  as.data.frame() %>% 
+                                  dplyr::select(gene) %>% as.data.frame())[,1]
+
+gene.universe.flavus.splicing <- (tbl(my_db, "lf2am") %>%  # Convert to Apis gene names via BLAST
+                         filter(lf %in% gene.universe.flavus.splicing) %>% 
+                         dplyr::select(am) %>% filter(!is.na(am)) %>% as.data.frame())[,1]
+
+alt.spliced.flavus <- (tbl(my_db, "lf2am") %>% 
+                         filter(lf %in% lf.alt.splice$gene) %>% 
+                         dplyr::select(am) %>% filter(!is.na(am)) %>% as.data.frame())[,1]
+
 GO.enrichment(alt.spliced.flavus, gene.universe.flavus, ontology = "BP") %>%
   pander(split.cell = 40, split.table = Inf)
 ```
 
-#### _Lasius niger_
+### GO terms for _L. niger genes showing pheromone-modulated alternative splicing
 ```{r}
-# The gene universe is all L. niger genes for which we found a BLAST hit in Apis mellifera
-gene.universe.niger <- (left_join(tbl(my_db, "rsem_ln") %>% dplyr::select(gene),
-                                  tbl(my_db, "ln2am") %>% rename(gene = ln), by = "gene") %>% 
-                          dplyr::select(am) %>% filter(!is.na(am)) %>% as.data.frame())[,1] %>% unique
-alt.spliced.niger <- (tbl(my_db, "ln2am") %>% filter(ln %in% ln.alt.splice$gene) %>% dplyr::select(am)%>% filter(!is.na(am)) %>% as.data.frame())[,1]
-GO.enrichment(alt.spliced.niger, gene.universe.niger, ontology = "BP") %>%
+gene.universe.niger.splicing <- (tbl(my_db, "isoforms_ln") %>% 
+                                  group_by(gene) %>% 
+                                  summarise(nIsoforms = n()) %>% filter(nIsoforms > 1) %>% 
+                                  as.data.frame() %>% 
+                                  dplyr::select(gene) %>% as.data.frame())[,1]
+
+gene.universe.niger.splicing <- (tbl(my_db, "ln2am") %>%  # Convert to Apis gene names via BLAST
+                         filter(ln %in% gene.universe.niger.splicing) %>% 
+                         dplyr::select(am) %>% filter(!is.na(am)) %>% as.data.frame())[,1] %>%
+  unique
+
+alt.spliced.niger <- (tbl(my_db, "ln2am") %>% 
+                        filter(ln %in% ln.alt.splice$gene) %>% 
+                        dplyr::select(am)%>% filter(!is.na(am)) %>% as.data.frame())[,1]
+
+GO.enrichment(alt.spliced.niger, gene.universe.niger.splicing, ontology = "BP") %>%
   pander(split.cell = 40, split.table = Inf)
 ```
 
 
-### GO term enrichment for transcriptional modules
+## GO term enrichment for transcriptional modules
 ```{r echo=FALSE}
 # For the module GO tests, the gene universe is genes that are present in the network
 gene.universe <- OGGs[[2]]$am 
 ```
 
 
-#### Enriched GO terms in module 1
+### Enriched GO terms in module 1
 ```{r echo=FALSE}
 GO.enrichment(genes.in.module(1), gene.universe, ontology = "BP") %>%
   pander(split.cell = 40, split.table = Inf)
 ```
 
-#### Enriched GO terms in module 2
+### Enriched GO terms in module 2
 ```{r echo=FALSE}
 GO.enrichment(genes.in.module(2), gene.universe, ontology = "BP") %>%
   pander(split.cell = 40, split.table = Inf)
 ```
 
-#### Enriched GO terms in module 3
+### Enriched GO terms in module 3
 ```{r echo=FALSE}
 GO.enrichment(genes.in.module(3), gene.universe, ontology = "BP") %>%
   pander(split.cell = 40, split.table = Inf)
 ```
 
-#### Enriched GO terms in module 4
+### Enriched GO terms in module 4
 ```{r echo=FALSE}
 GO.enrichment(genes.in.module(4), gene.universe, ontology = "BP") %>%
   pander(split.cell = 40, split.table = Inf)
 ```
 
-#### Enriched GO terms in module 5
+### Enriched GO terms in module 5
 ```{r echo=FALSE}
 GO.enrichment(genes.in.module(5), gene.universe, ontology = "BP") %>%
   pander(split.cell = 40, split.table = Inf)
 ```
 
-#### Enriched GO terms in module 6
-```{r echo=FALSE}
-GO.enrichment(genes.in.module(6), gene.universe, ontology = "BP") %>%
-  pander(split.cell = 40, split.table = Inf)
-```
-
-#### Enriched GO terms in module 7
-```{r echo=FALSE}
-GO.enrichment(genes.in.module(7), gene.universe, ontology = "BP") %>%
-  pander(split.cell = 40, split.table = Inf)
-```
 
 
 <!-- # FIX THIS -->
