@@ -497,6 +497,16 @@ inspect.module.genes <- function(module){
   gene.names$k <- colSums(as.matrix(TOM)[network[[1]]$colors == paste("Module", module), 
                                         network[[1]]$colors == paste("Module", module)])
   gene.names <- gene.names %>% arrange(-k)
+  
+  am <- tbl(my_db, "ebseq_gene_am") %>% as.data.frame()
+  gene.names$am_fc <- am$PostFC[match(gene.names$gene, am$gene)]
+  bt <- tbl(my_db, "ebseq_gene_bt") %>% rename(bt = gene) %>% left_join(tbl(my_db, "bt2am"))
+  gene.names$bt_fc <- bt$PostFC[match(gene.names$gene, bt$am)]
+  lf <- tbl(my_db, "ebseq_gene_lf") %>% rename(lf = gene) %>% left_join(tbl(my_db, "lf2am"))
+  gene.names$lf_fc <- lf$PostFC[match(gene.names$gene, lf$am)]
+  ln <- tbl(my_db, "ebseq_gene_ln") %>% rename(ln = gene) %>% left_join(tbl(my_db, "ln2am"))
+  gene.names$ln_fc <- ln$PostFC[match(gene.names$gene, ln$am)]
+  print(gene.names)
   row.names(gene.names) <- NULL
   gene.names
 }
