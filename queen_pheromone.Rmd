@@ -13,6 +13,7 @@ output:
 
 ### Load R libraries (install first from CRAN or Bioconductor)
 ```{r message=FALSE, warning=FALSE, results="hide"}
+library(GOstats) # GO term hypergeometric tests
 library(WGCNA) # Gene coexpression networks
 library(RSQLite) # Access SQLite databases
 library(reshape2) # data tidying (melt)
@@ -28,7 +29,7 @@ library(gplots) # Venn diagram
 library(ecodist) # for nmds
 library(MuMIn) # for model comparison
 library(sva) # for ComBat function; install via source("https://bioconductor.org/biocLite.R"); biocLite("sva")
-library(pander)
+library(pander) # for nice tables
 # library(GOstats) is also needed, but loaded later
 
 # Open database connections (Sasha uses SQL, Luke prefers dplyr)
@@ -99,6 +100,7 @@ make.OGGs <- function(species, bad.samples = NULL, log.data = T){
   if(!is.null(bad.samples)) rbbs <- rbbs[!(rownames(rbbs) %in% bad.samples), ]
   
   # Discard genes where NAs appear
+  gene.name.mappings <- gene.name.mappings[!(is.na(colSums(rbbs))), ]
   rbbs <- rbbs[, !(is.na(colSums(rbbs)))]
 
   # discard genes where expression is zero for all samples in 1 or more species
@@ -108,6 +110,7 @@ make.OGGs <- function(species, bad.samples = NULL, log.data = T){
    if(min(as.numeric(tapply(rbbs[,i], spp, sum))) == 0) to.keep[i] <- FALSE
  }
 rbbs <- rbbs[, to.keep]
+gene.name.mappings <- gene.name.mappings[to.keep, ]
 
   list(tpm = rbbs, gene.mappings = gene.name.mappings)
 }
@@ -188,6 +191,7 @@ species.combinations$sig[species.combinations$p < 0.0001] <- "***"
 # Make a table
 species.combinations %>% mutate(rho = format(round(rho, 2), nsmall = 2)) %>% pander
 
+# Make a figure
 species.combinations %>% ggplot(aes(sp1, sp2, fill=rho)) + geom_tile(colour="white", size=4) + scale_fill_gradient2(name = "Corr", low = brewer.pal(9, "RdYlBu")[7], mid = "white", high = brewer.pal(9, "RdYlBu")[2]) + 
   geom_text(aes(label = sig)) +
   theme_bw() + theme(panel.grid = element_blank(), panel.border = element_blank(), axis.ticks = element_blank(), axis.text = element_text(face = "italic")) + xlab(NULL) + ylab(NULL) +
@@ -330,8 +334,10 @@ build.network <- function(expression.data.list){
   # Use this power to generate a gene co-expression network, using the default settings
   network <- blockwiseModules(expression.data.list[[1]], 
                               power = soft.power$powerEstimate,
+                              networkType = "unsigned",
                               minModuleSize = 30,
-                              verbose = 0)
+                              verbose = 0,
+                              saveTOMs = T)
   list(network, expression.data.list[[2]])
 }
 
@@ -428,6 +434,7 @@ eigen.data %>% treatments.network.plot
 ```
 
 ### Run model selection analysis to test for treatment and species effects on eigengenes
+The models are listed from best to worst for each module. The delta column gives the different in AICc scores between the focal model and the top model in the set, where delta > 2 is considered to be a significant improvement in model fit. The column 'weight' gives Akaike weights, which can be interpreted as probabilities that the focal model is the top model in the set given the data.
 ```{r}
 run.stats(eigen.data) %>% pander
 ```
@@ -446,7 +453,8 @@ meta.module.plot <- function(network){
            Var2 = factor(Var2, levels = ordering)) %>% 
     rename(Corr = value)
   heat.map <- heat.map.data %>% ggplot(aes(Var1, Var2, fill = Corr)) + geom_tile() + 
-    scale_fill_gradient2(low = brewer.pal(9, "RdBu")[8], mid = "white", high = brewer.pal(9, "RdBu")[2]) + xlab(NULL) + ylab(NULL) + theme_bw() + theme(panel.border = element_blank(), panel.grid = element_blank())
+    scale_fill_gradient2(low = brewer.pal(9, "RdBu")[8], mid = "white", high = brewer.pal(9, "RdBu")[2]) + xlab(NULL) + ylab(NULL) + theme_bw() + theme(panel.border = element_blank(), panel.grid = element_blank()) + 
+    scale_x_discrete(expand = c(0,0)) + scale_y_discrete(expand = c(0,0))
  
   dendrogram <- ggdendrogram(cluster) + theme(axis.text.x = element_blank(), axis.text.y = element_blank())
   
@@ -462,8 +470,6 @@ meta.module.plot(network)
 ## GO term enrichment
 First, define some functions we will need. See also the R script "Script to set up for GO analyses.R", which was used to make the object gene_set_collection.RData, following instructions for making a GO annotation for a non-model organism at http://bioconductor.org/packages/2.11/bioc/vignettes/GOstats/inst/doc/GOstatsForUnsupportedOrganisms.pdf.
 ```{r}
-suppressMessages(library(GOstats)) # Note - because of conflicts between GOstats, RSQLite and dplyr, use caution after loading this
-
 GO.enrichment <- function(enriched.genes, gene.universe, ontology){
   params <- GSEAGOHyperGParams(name="Luke's Params",
                                geneSetCollection = gene_set_collection,
@@ -480,12 +486,26 @@ GO.enrichment <- function(enriched.genes, gene.universe, ontology){
                            ExpCount = format(round(ExpCount, 3), nsmall = 3))
 }
 
+# Find the names for the genes in a given module
 genes.in.module <- function(module.number){
-  OGGs[[2]]$am[network[[1]]$colors == paste("Module", module.number)]
+  colnames(OGGs[[1]])[which(network[[1]]$colors == paste("Module", module.number))]
+}
+
+inspect.module.genes <- function(module){
+  gene.names <- tbl(my_db, "bee_names") %>% as.data.frame()
+  gene.names <- gene.names[gene.names$gene %in% genes.in.module(module), ]
+  gene.names$k <- colSums(as.matrix(TOM)[network[[1]]$colors == paste("Module", module), 
+                                        network[[1]]$colors == paste("Module", module)])
+  gene.names <- gene.names %>% arrange(-k)
+  row.names(gene.names) <- NULL
+  gene.names
 }
 
 # Load the gene set collection object needed for the GO tests
 load("data/gene_set_collection.RData")
+
+# Load the TOM object needed for connectivity of each gene
+load("blockwiseTOM-block.1.RData")
 ```
 
 ## GO term enrichment for differentially _expressed_ genes
@@ -678,26 +698,39 @@ GO.enrichment(genes.in.module(5), gene.universe, ontology = "BP") %>%
 ```
 
 
+### Inspect the gene list for the pheromone-sensitive module 4
+```{r echo=FALSE}
+inspect.module.genes(4) %>% pander(split.cell = 40, split.table = Inf)
+```
 
-<!-- # FIX THIS -->
-<!-- ### Now plot the network to look at the modules that we identified -->
-<!-- # ```{r} -->
-<!-- # module.cluster.plot <- function(network){ -->
-<!-- #   moduleColors <- labels2colors(c(0,1:max(network$colors))) -->
-<!-- #   sizeGrWindow(12,6) -->
-<!-- #   # Use the layout function for more involved screen sectioning -->
-<!-- #   layout(matrix(1:2, 2), heights = c(0.8, 0.2), widths = c(1,1)) -->
-<!-- #   #layout.show(4); -->
-<!-- #    -->
-<!-- #   # Plot the consensus network dendrogram and the module colors underneath for each block -->
-<!-- #   plotDendroAndColors(network$dendrograms[[1]], moduleColors[1 + network$colors], -->
-<!-- #                       "Module colors", -->
-<!-- #                       main = "Gene dendrogram and module colors", -->
-<!-- #                       dendroLabels = FALSE, hang = 0.03, -->
-<!-- #                       addGuide = TRUE, guideHang = 0.05, -->
-<!-- #                       setLayout = FALSE) -->
-<!-- # } -->
-<!-- #  -->
-<!-- # module.cluster.plot(network[[1]]) -->
+```{r echo=FALSE}
+unlink("blockwiseTOM-block.1.RData") # Delete this to save memory
+```
+
+
+<!-- ## Now plot the network to look at the modules that we identified -->
+<!-- ```{r} -->
+<!-- module.cluster.plot <- function(network){ -->
+<!--   modules <- as.numeric(gsub("Module ", "", network$colors)) -->
+<!--   moduleColors <- labels2colors(c(0, 1:max(modules))) -->
+<!--     print(moduleColors) -->
+
+<!--   sizeGrWindow(12,6) -->
+<!--   # Use the layout function for more involved screen sectioning -->
+<!--   layout(matrix(1:2, 2), heights = c(0.8, 0.2), widths = c(1,1)) -->
+<!--   # Plot the consensus network dendrogram and the module colors underneath for each block -->
+<!--   plotDendroAndColors(network$dendrograms[[1]], moduleColors[1 + modules], -->
+<!--                       "Module colors", -->
+<!--                       main = "Gene dendrogram and module colors", -->
+<!--                       dendroLabels = FALSE, hang = 0.03, -->
+<!--                       addGuide = TRUE, guideHang = 0.05, -->
+<!--                       setLayout = FALSE) -->
+<!-- } -->
+
+<!-- module.cluster.plot(network[[1]]) -->
 <!-- ``` -->
+
+
+
+
 
