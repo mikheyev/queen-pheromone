@@ -14,7 +14,7 @@ output:
 ### Load R libraries (install first from CRAN or Bioconductor)
 ```{r message=FALSE, warning=FALSE, results="hide"}
 library(GOstats) # GO term hypergeometric tests
-library(WGCNA) # Gene coexpression networks
+library(WGCNA) # Gene networks - needs 'impute' dependency: source("https://bioconductor.org/biocLite.R"); biocLite("impute")
 library(RSQLite) # Access SQLite databases
 library(reshape2) # data tidying (melt)
 library(dplyr) # data tidying
