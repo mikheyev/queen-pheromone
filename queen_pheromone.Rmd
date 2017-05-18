@@ -1,21 +1,18 @@
 ---
 title: "Online Supplementary Material"
-author: "Queen pheromones have conserved effects on gene expression in social insects separated by 150MY of evolution"
+author: "From the manuscript: Queen pheromones have conserved effects on gene expression in social insects separated by 150MY of evolution"
 output:
   html_document:
     toc: true # table of content true
     toc_float: true
     depth: 3  # upto three depths of headings (specified by #, ## and ###)
     number_sections: false  ## if you want number sections at each table header
-    theme: united 
+    theme: yeti 
     code_folding: hide
   pdf_document: default
 ---
 
-```{r echo=FALSE, results='hide'}
-library(knitr) # set up cacheing to save time when re-building html document
-```
-`r opts_chunk$set(cache=TRUE)`
+This document was prepared in R Markdown, then translated into html using the R package `knitr`. Press the buttons labelled **code** to show or hide the R code used to produce each table, plot or statistical result. For convenience, large tables can be minimised with the buttons labelled **Hide output**. 
 
 
 ### Load R libraries (install first from CRAN or Bioconductor)
@@ -47,11 +44,15 @@ my_db <- src_sqlite("data/queen pheromone.db")
 bad.samples <- c("lf1", "ln1", "ln12", "lf12")
 ```
 
+```{r echo=FALSE, results='hide'}
+library(knitr) # set up cacheing to save time when re-building html document
+```
+`r opts_chunk$set(cache=TRUE)`
 
 ### First let's check for and remove strongly outlying samples
 
-Define a function to get gene expression data for a given set of orthologous genes. We define orthologous genes as those that are each other's reciprocal best BLAST. The bad.samples argument can be used to remove some named samples. By default this function logs the expression data (using log10). It returns a list with two elements: the first element is a matrix of expression data (rows = samples, cols = genes), and the second is a data frame giving the species-specific names of the orthologous genes
 ```{r make.OGGs}
+  # Define a function to get gene expression data for a given set of orthologous genes. We define orthologous genes as those that are each other's reciprocal best BLAST. The bad.samples argument can be used to remove some named samples. By default this function logs the expression data (using log10). It returns a list with two elements: the first element is a matrix of expression data (rows = samples, cols = genes), and the second is a data frame giving the species-specific names of the orthologous genes
 make.OGGs <- function(species, bad.samples = NULL, log.data = T){
   
   # set up forward mappings, e.g. "am2bt", "am2lf", "am2ln"
@@ -125,27 +126,38 @@ gene.name.mappings <- gene.name.mappings[to.keep, ]
 ```
 
 
-#### This plot illustrates that 4 of the _Lasius_ samples are highly different to all of the rest
+#### 4 of the _Lasius_ samples are highly different to all of the rest
 Closer inspection reveals that they are have zeros for many of the transcripts, so perhaps they had fragemented/low abundance libraries.
-```{r}
+```{r outliers}
+set.seed(1) # nmds involves random numbers, so make this plot reproducible
 expression.data <- make.OGGs(c("am", "bt", "ln", "lf"))[[1]]
 treatments <- tbl(my_db, "treatments") %>% as.data.frame()
 
 shhh <- capture.output(nmds.output <- dist(expression.data) %>% nmds())
-data.frame(id = rownames(expression.data), nmds.output$conf[[length(nmds.output$conf)]], stringsAsFactors = F) %>% left_join(treatments, by = "id") %>% 
-  ggplot(aes(X1,X2, shape = species)) + geom_point(aes(colour = treatment)) + geom_text_repel(aes(label = id), size=3.6) + xlab("NMDS 1") + ylab("NMDS 2")
+data.frame(id = rownames(expression.data), nmds.output$conf[[length(nmds.output$conf)]], stringsAsFactors = F) %>%
+  left_join(treatments, by = "id") %>% 
+  rename(Species = species, Treatment = treatment) %>%
+  ggplot(aes(X1,X2, shape = Species)) + geom_point(aes(colour = Treatment)) + geom_text_repel(aes(label = id), size=3.6) + xlab("NMDS 1") + ylab("NMDS 2")
+
 
 bad.samples <- c("lf1", "ln1", "ln12", "lf12")
 ```
+ <br/><br/> 
+*Figure S1*: After reducing the transcriptome data to two axes using non-metric multidimensional scaling, four _Lasius_ samples are clear outliers.
 
-#### Samples cluster sensibly following outlier removal
-```{r}
+
+```{r no.outliers}
+set.seed(1) # nmds involves random numbers, so make this plot reproducible
 expression.data <- make.OGGs(c("am", "bt", "ln", "lf"), bad.samples = bad.samples)[[1]]
 
 shhh <- capture.output(nmds.output <- dist(expression.data) %>% nmds())
-data.frame(id = rownames(expression.data), nmds.output$conf[[length(nmds.output$conf)]], stringsAsFactors = F) %>% left_join(treatments, by = "id")  %>% ggplot(aes(X1,X2)) + geom_point(aes(shape = species, colour = treatment)) + geom_text_repel(aes(label = id), size=3.6) + xlab("NMDS 1") + ylab("NMDS 2")
+data.frame(id = rownames(expression.data), nmds.output$conf[[length(nmds.output$conf)]], stringsAsFactors = F) %>%
+  left_join(treatments, by = "id") %>%
+  rename(Species = species, Treatment = treatment) %>% 
+  ggplot(aes(X1,X2)) + geom_point(aes(shape = Species, colour = Treatment)) + geom_text_repel(aes(label = id), size=3.6) + xlab("NMDS 1") + ylab("NMDS 2")
 ```
-
+ <br/><br/> 
+ *Figure S2*: With the four problematic samples removed, the samples cluster according to species with no obvious outliers.
 
 
 ## Testing whether gene expression is correlated across species
@@ -153,7 +165,7 @@ data.frame(id = rownames(expression.data), nmds.output$conf[[length(nmds.output$
 Specifically, these tests ask if genes that are up- (or down-) regulated in the queen pheromone treatment in one species are also up (or down) regulated in another. These tests used fold expression changes calculated using ebseq, after omitting the four irregular Lasius samples.
 
 #### Define function to retrieve fold-change expression data (calculated with ebseq) for genes that are each other's reciprocal best BLAST
-```{r}
+```{r fc.function}
 get.fc.for.pair.species <- function(species1, species2){
   query <- 'SELECT rbb.X AS X_gene, rbb.Y AS Y_gene, ebseq_gene_X.PostFC AS X_fc, ebseq_gene_Y.PostFC AS Y_fc FROM ebseq_gene_X
              JOIN
@@ -171,8 +183,9 @@ get.fc.for.pair.species <- function(species1, species2){
 ```
 
 
-#### Make a table and plot of the correlations for each pair of species
-```{r}
+#### Make a table and a plot of the correlations for each pair of species
+*Table S1*: Results of Spearman's rank correlations, testing whether the fold-change in gene expression in response to queen pheromone is correlated for a given pair of species. Positive coefficients (rho) indicate that on average, orthologous genes are affected in the same direction by queen pheromones.
+```{r TableS1}
 species.combinations <- t(combn(c("am", "bt", "lf", "ln"), 2))
 rho <- numeric(nrow(species.combinations))
 p <- numeric(nrow(species.combinations))
@@ -184,31 +197,40 @@ for(i in 1:nrow(species.combinations)){
   p[i] <- results$p.value
 }
 
-species.combinations <- data.frame(sp1 = species.combinations[,1],
-                                   sp2 = species.combinations[,2],
+species.combinations <- data.frame(Species1 = species.combinations[,1],
+                                   Species2  = species.combinations[,2],
                                    rho = rho,
                                    p = p,
                                    sig = " ", stringsAsFactors = F)
+
+species.combinations[species.combinations == "am"] <- "Apis mellifera"
+species.combinations[species.combinations == "bt"] <- "Bombus terrestris"
+species.combinations[species.combinations == "lf"] <- "Lasius flavus"
+species.combinations[species.combinations == "ln"] <- "Lasius niger"
 
 species.combinations$sig[species.combinations$p < 0.05] <- "*"
 species.combinations$sig[species.combinations$p < 0.01] <- "**"
 species.combinations$sig[species.combinations$p < 0.0001] <- "***"
 # Make a table
-species.combinations %>% mutate(rho = format(round(rho, 2), nsmall = 2)) %>% pander
+species.combinations %>% mutate(rho = format(round(rho, 3), nsmall = 3)) %>% pander
+```
 
+```{r FigureS1}
 # Make a figure
-species.combinations %>% ggplot(aes(sp1, sp2, fill=rho)) + geom_tile(colour="white", size=4) + scale_fill_gradient2(name = "Corr", low = brewer.pal(9, "RdYlBu")[7], mid = "white", high = brewer.pal(9, "RdYlBu")[2]) + 
+species.combinations %>% ggplot(aes(Species1, Species2, fill=rho)) + geom_tile(colour="white", size=4) + scale_fill_gradient2(name = "Corr", low = brewer.pal(9, "RdYlBu")[7], mid = "white", high = brewer.pal(9, "RdYlBu")[2]) + 
   geom_text(aes(label = sig)) +
   theme_bw() + theme(panel.grid = element_blank(), panel.border = element_blank(), axis.ticks = element_blank(), axis.text = element_text(face = "italic")) + xlab(NULL) + ylab(NULL) +
   scale_x_discrete(labels = c("Apis\nmellifera", "Bombus\nterrestris", "Lasius\nflavus"), expand = c(0,0)) + 
   scale_y_discrete(labels = c("Bombus\nterrestris", "Lasius\nflavus", "Lasius\nniger"), expand = c(0,0)) 
 ```
-
+ <br/><br/> 
+ *Figure S3*: Results of Spearman's rank correlations, testing whether the fold-change in gene expression in response to queen pheromone is correlated for a given pair of species. The colour shows the correlation (Spearman's rho), where red  indicates that on average, orthologous genes are affected in the same direction by queen pheromones, and blue indicates the reverse. The stars show the degree of statistical significance (\*: p < 0.05, \*\* p < 0.01, \*\*\* p < 0.0001).
 
 ## Identifying genes that splice differentially following queen pheromone treatment
 
-Define a function to search for significantly alternatively spliced genes. We define these as genes that have at least two differentially expressed isoforms, where queen pheromone stimulates expresison of one isoform but surpresses expression of another
-```{r}
+```{r splice.function}
+# Define a function to search for significantly alternatively spliced genes. We define these as genes that have at least two differentially expressed isoforms, where queen pheromone stimulates expresison of one isoform but surpresses expression of another
+
 find.alternatively.spliced.genes <- function(species){
   
   # Write a database query with 'X' as a placeholder for the species name
@@ -250,49 +272,57 @@ JOIN
   # Remove the 'isoform X' part from the gene name, so it gives the name of the gene not the isoform
   output$name <- unlist(lapply(strsplit(output$name, split = " isoform "), function(x) x[1]))
   
-  left_join(output, SpliceCompare, by = "gene") 
+  output <- left_join(output, SpliceCompare, by = "gene") 
+  names(output) <- c("Gene", "Name", "Lowest FC", "Highest FC")
+  output
 }
 ```
 
 ### Genes showing pheromone-induced alternative splicing in _A. mellifera_
+*Table S2*: List of genes showing statistically significant pheromone-induced alternative splicing in _A. mellifera_. These genes were defined as those that have at least two isoforms that are differentially expressed following pheromone treatment with p < 1e-05, and for which one isoform increases in expression while another decreases. The last two columns show the fold changes of the most down-regulated and most up-regulated isoforms.
+ <br/><br/> 
 <input type=button class=hideshow></input>
-```{r}
+```{r am.splice}
 am.alt.splice <- find.alternatively.spliced.genes("am")
 pander(am.alt.splice, split.cell = 40, split.table = Inf)
 ```
 
 ### Genes showing pheromone-induced alternative splicing in _L. flavus_
+*Table S3*: List of genes showing statistically significant pheromone-induced alternative splicing in _L. flavus_. The table shows the same information as Table S2.
+ <br/><br/> 
 <input type=button class=hideshow></input>
-```{r}
+```{r lf.splice}
 lf.alt.splice<- find.alternatively.spliced.genes("lf")
 pander(lf.alt.splice, split.cell = 40, split.table = Inf)
 ```
 
 ### Genes showing pheromone-induced alternative splicing in _L. niger_
+*Table S4*: List of genes showing statistically significant pheromone-induced alternative splicing in _L. niger_. The table shows the same information as Table S2.
+ <br/><br/> 
 <input type=button class=hideshow></input>
-```{r}
+```{r ln.splice}
 ln.alt.splice <- find.alternatively.spliced.genes("ln")
 pander(ln.alt.splice, split.cell = 40, split.table = Inf)
 ```
 
 ### There are no genes showing pheromone-sensitive splicing for _B. terrestris_
-```{r}
+```{r bt.splice}
 find.alternatively.spliced.genes("bt")  
 ```
 
 ### There is little overlap of pheromone-sensitive alternatively-spliced genes
-```{r}
-lf.alt <- lf.alt.splice$name[lf.alt.splice$name != " "] # Exclude genes with no A. mellifera names
-ln.alt <- ln.alt.splice$name[ln.alt.splice$name != " "]
-venn(list(Apis = am.alt.splice$name,`L. flavus` = lf.alt,`L. niger` = ln.alt))
+```{r splice.venn}
+lf.alt <- lf.alt.splice$Name[lf.alt.splice$Name != " "] # Exclude genes with no A. mellifera names
+ln.alt <- ln.alt.splice$Name[ln.alt.splice$Name != " "]
+venn(list(Apis = am.alt.splice$Name,`L. flavus` = lf.alt,`L. niger` = ln.alt))
 ```
 
 
 ## Gene co-expression network analysis
 
 First, we define a series of functions for gene co-expression network analysis.
-```{r}
-# This function using the ComBat function from the package 'sva' to remove variance in gene expression
+```{r network.functions}
+# This function uses the ComBat function from the package 'sva' to remove variance in gene expression
 # that is due to colony and species, allowing us to detect variance due to queen pheromone treatment.
 # The use of ComBat in this fashion follows recommendations from the author of the WGCNA package. 
 remove.effects.combat <- function(expression.data){
@@ -379,7 +409,7 @@ run.stats <- function(dat){
 ```
 
 ### Make the gene co-expression network, using the set of orthologous genes for all 4 species
-```{r results="hide", warning=FALSE}
+```{r make.network, results="hide", warning=FALSE}
 # The 4 bad samples get removed, then we find the orthologous genes, the data are scaled with ComBat, and then we build the network using the lowest soft-thresholding power that gives at least R^2 > 0.8 model fit
 OGGs <- make.OGGs(c("am", "bt", "ln", "lf"), bad.samples = bad.samples)
 network <- OGGs[[1]] %>%
@@ -416,10 +446,15 @@ treatments.network.plot <- function(dat){
 
 eigen.data %>% treatments.network.plot
 ```
+ <br/><br/> 
+ *Figure S4*: The Figure shows the distribution of module eigengenes for each combination of module, species, and queen pheromone (QP) treatment. Positive values mean that the focal group has higher eigengenes, which derived from the relative expression levels of a module of genes, than the average. Queen pheromone treatment had a statistically significant effect on eigengenes for module 4. 
+
+
 
 ### Run model selection analysis to test for treatment and species effects on eigengenes
-The models are listed from best to worst for each module. The delta column gives the different in AICc scores between the focal model and the top model in the set, where delta > 2 is considered to be a significant improvement in model fit. The column 'weight' gives Akaike weights, which can be interpreted as probabilities that the focal model is the top model in the set given the data.
 
+*Table S5*: Model selection analysis, using AICc (corrected Akaike Information Criterion) to rank all possible models of the module eigengene data shown in Figure S4. The models are listed from best to worst for each module. The delta column gives the different in AICc scores between the focal model and the top model in the set, where delta > 2 is considered to be a significant improvement in model fit. The column 'weight' gives Akaike weights, which can be interpreted as probabilities that the focal model is the top model in the set given the data.
+ <br/><br/> 
 <input type=button class=hideshow></input>
 ```{r}
 run.stats(eigen.data) %>% pander
@@ -450,13 +485,14 @@ meta.module.plot <- function(network){
 
 meta.module.plot(network)
 ```
-
+ <br/><br/> 
+ *Figure S5*: Dendrogram and heat map showing the correlations among module eigengene values and the queen pheromone treatment (QP; coded as zero and 1 for the control and treatment respectively). Modules with red colour, or which are close on the dendrogram, show more correlated expression. The queen pheromone treatment was correlated with Module 4, but was relatively uncorrelated with the other modules.
 
 ## GO term enrichment for differentially _expressed_ genes
 First, define some functions we will need. See also the R script "Script to set up for GO analyses.R", which was used to make the object gene_set_collection.RData, following instructions for making a GO annotation for a non-model organism at http://bioconductor.org/packages/2.11/bioc/vignettes/GOstats/inst/doc/GOstatsForUnsupportedOrganisms.pdf.
 
 There are only two differentially expressed genes for _B. terrestris_, so it is only meaningful to test for enriched GO terms in the other three species.
-```{r warnings = FALSE}
+```{r module.funs, warnings = FALSE}
 GO.enrichment <- function(enriched.genes, gene.universe, ontology){
   params <- GSEAGOHyperGParams(name="Luke's Params",
                                geneSetCollection = gene_set_collection, # Custom GO annotations for all the OGGs
@@ -507,8 +543,10 @@ load("blockwiseTOM-block.1.RData")
 
 
 ### Enriched GO terms for differentially expressed genes in _A. mellifera_
+*Table S6*: Results of GO term enrichment analysis on the list of genes showing significant differential expression in response to queen pheromone in _A. mellifera_. The gene universe was defined as all _A. mellifera_ genes measured in this study.
+ <br/><br/> 
 <input type=button class=hideshow></input>
-```{r}
+```{r apis.exp.go}
 gene.universe.apis <- (tbl(my_db, "rsem_am") %>% 
                          as.data.frame())$gene
 diff.expressed.apis <- (tbl(my_db, "ebseq_padj_gene_am") %>% dplyr::select(gene) %>% as.data.frame())[,1]
@@ -518,8 +556,10 @@ GO.enrichment(diff.expressed.apis, gene.universe.apis, ontology = "BP") %>%
 
 
 ### Enriched GO terms for differentially expressed genes in _L. flavus_
+*Table S7*: Results of GO term enrichment analysis on the list of genes showing significant differential expression in response to queen pheromone in _L. flavus_. The gene universe used was defined as all _L. flavus_ genes for which we detected an _A. mellifera_ ortholog.
+ <br/><br/> 
 <input type=button class=hideshow></input>
-```{r}
+```{r flavus.exp.go}
 # The gene universe is all L. flavus genes for which we found a BLAST hit in Apis mellifera
 gene.universe.flavus <- (left_join(tbl(my_db, "rsem_lf") %>% 
                                      dplyr::select(gene), 
@@ -537,8 +577,10 @@ GO.enrichment(diff.expressed.flavus, gene.universe.flavus, ontology = "BP") %>%
 ```
 
 ### Enriched GO terms for differentially expressed genes in _L. niger_
+*Table S8*: Results of GO term enrichment analysis on the list of genes showing significant differential expression in response to queen pheromone in _L. niger_. The gene universe used was defined as all _L. niger_ genes for which we detected an _A. mellifera_ ortholog.
+ <br/><br/> 
 <input type=button class=hideshow></input>
-```{r}
+```{r niger.exp.go}
 # The gene universe is all L. niger genes for which we found a BLAST hit in Apis mellifera
 gene.universe.niger <- (left_join(tbl(my_db, "rsem_ln") %>% 
                                     dplyr::select(gene), 
@@ -557,7 +599,7 @@ GO.enrichment(diff.expressed.niger, gene.universe.niger, ontology = "BP") %>%
 
 ## Find the number of intersecting differentially-expressed orthologous genes across species
 Bombus is omitted because there were only 2 differentially expressed genes and both are absent in the other three species.
-```{r}
+```{r find.intersect}
 overlap.counts <- table(c(diff.expressed.apis, diff.expressed.flavus, diff.expressed.niger))
 overlap.thrice <- names(overlap.counts[overlap.counts == 3])
 
@@ -585,21 +627,27 @@ names(all.overlaps)[1:2] <- c("Gene", "Name")
 rownames(all.overlaps) <- NULL
 ```
 
+*Table S9*: Names of all the orthologous genes that were significantly differentially expressed between pheromone treatments in more than one species.
+ <br/><br/> 
 <input type=button class=hideshow></input>
-```{r}
+```{r overlap.table}
 pander(all.overlaps, split.cell = 40, split.table = Inf)
 ```
 
 ### Venn diagram showing number of overlapping differentially expressed genes
-```{r}
+```{r expr.venn}
 venn(list(Apis = diff.expressed.apis,`L. flavus` = diff.expressed.flavus,`L. niger` = diff.expressed.niger))
 ```
+ <br/><br/> 
+ *Figure S6*: Venn diagram showing number significantly differentially expressed genes in each species, as well as the overlap.
 
 
 
 ### GO term enrichment for genes whose expression is affected by queen pheromone in more than one species
+*Table S10*: Results of GO term enrichment analysis on the list of genes showing significant differential expression in response to queen pheromone in two or more species. The gene universe used was defined as all genes for which we found an ortholog in all four species.
+ <br/><br/> 
 <input type=button class=hideshow></input>
-```{r}
+```{r overlap.go}
 GO.enrichment(all.overlaps$Gene %>% unique, gene.universe.apis, ontology = "BP") %>%
   pander(split.cell = 40, split.table = Inf)
 ```
@@ -608,7 +656,7 @@ GO.enrichment(all.overlaps$Gene %>% unique, gene.universe.apis, ontology = "BP")
 ## GO term enrichment for differentially spliced genes
 
 ### GO terms for _A. mellifera_ genes showing pheromone-modulated alternative splicing
-```{r}
+```{r apis.spl.go}
 # The gene universe is defined as all genes that have 2 or more isoforms. It would be anti-conservative if we instead included all genes, not just that are alternatively spliced
 gene.universe.apis.splicing <- (tbl(my_db, "isoforms_am") %>% 
                                   group_by(gene) %>% 
@@ -617,14 +665,16 @@ gene.universe.apis.splicing <- (tbl(my_db, "isoforms_am") %>%
                                   dplyr::select(gene) %>% as.data.frame())[,1]
 ```
 
+*Table S11*: Results of GO term enrichment analysis on the list of genes showing significant alternative splicing in _A. mellifera_. The gene universe used was defined as all genes that showed alternative splicing in _A. mellifera_.
+ <br/><br/> 
 <input type=button class=hideshow></input>
-```{r}
-GO.enrichment(am.alt.splice$gene, gene.universe.apis.splicing, ontology = "BP") %>%
+```{r apis.go}
+GO.enrichment(am.alt.splice$Gene, gene.universe.apis.splicing, ontology = "BP") %>%
   pander(split.cell = 40, split.table = Inf)
 ```
 
 ### GO terms for _L. flavus_ genes showing pheromone-modulated alternative splicing
-```{r}
+```{r flavus.spl.go}
 # For flavus and niger, we additionally have to find the best BLAST Apis genes when constructing the gene lists
 gene.universe.flavus.splicing <- (tbl(my_db, "isoforms_lf") %>% 
                                   group_by(gene) %>% 
@@ -637,10 +687,12 @@ gene.universe.flavus.splicing <- (tbl(my_db, "lf2am") %>%  # Convert to Apis gen
                          dplyr::select(am) %>% filter(!is.na(am)) %>% as.data.frame())[,1]
 
 alt.spliced.flavus <- (tbl(my_db, "lf2am") %>% 
-                         filter(lf %in% lf.alt.splice$gene) %>% 
+                         filter(lf %in% lf.alt.splice$Gene) %>% 
                          dplyr::select(am) %>% filter(!is.na(am)) %>% as.data.frame())[,1]
 ```
 
+*Table S12*: Results of GO term enrichment analysis on the list of genes showing significant alternative splicing in _L. flavus_. The gene universe used was defined as all genes that showed alternative splicing in _L. flavus_, which also had a known ortholog in _A. mellifera_.
+ <br/><br/> 
 <input type=button class=hideshow></input>
 ```{r}
 GO.enrichment(alt.spliced.flavus, gene.universe.flavus, ontology = "BP") %>%
@@ -648,7 +700,7 @@ GO.enrichment(alt.spliced.flavus, gene.universe.flavus, ontology = "BP") %>%
 ```
 
 ### GO terms for _L. niger genes showing pheromone-modulated alternative splicing
-```{r}
+```{r niger.spl.go}
 gene.universe.niger.splicing <- (tbl(my_db, "isoforms_ln") %>% 
                                   group_by(gene) %>% 
                                   summarise(nIsoforms = n()) %>% filter(nIsoforms > 1) %>% 
@@ -661,11 +713,11 @@ gene.universe.niger.splicing <- (tbl(my_db, "ln2am") %>%  # Convert to Apis gene
   unique
 
 alt.spliced.niger <- (tbl(my_db, "ln2am") %>% 
-                        filter(ln %in% ln.alt.splice$gene) %>% 
+                        filter(ln %in% ln.alt.splice$Gene) %>% 
                         dplyr::select(am)%>% filter(!is.na(am)) %>% as.data.frame())[,1]
 ```
 
-<input type=button class=hideshow></input>
+*Table S13*: Results of GO term enrichment analysis on the list of genes showing significant alternative splicing in _L. niger_. The gene universe used was defined as all genes that showed alternative splicing in _L. niger_, which also had a known ortholog in _A. mellifera_.
 ```{r}
 GO.enrichment(alt.spliced.niger, gene.universe.niger.splicing, ontology = "BP") %>%
   pander(split.cell = 40, split.table = Inf)
@@ -680,6 +732,8 @@ gene.universe.modules <- OGGs[[2]]$am
 
 
 ### Enriched GO terms in module 1
+*Table S14*: Results of GO term enrichment analysis for the genes in Module 1. The gene universe used was defined as all genes for which we found an ortholog in all four species.
+ <br/><br/> 
 <input type=button class=hideshow></input>
 ```{r}
 GO.enrichment(genes.in.module(1), gene.universe.modules, ontology = "BP") %>%
@@ -687,6 +741,8 @@ GO.enrichment(genes.in.module(1), gene.universe.modules, ontology = "BP") %>%
 ```
 
 ### Enriched GO terms in module 2
+*Table S15*: Results of GO term enrichment analysis for the genes in Module 2. The gene universe used was defined as all genes for which we found an ortholog in all four species.
+ <br/><br/> 
 <input type=button class=hideshow></input>
 ```{r}
 GO.enrichment(genes.in.module(2), gene.universe.modules, ontology = "BP") %>%
@@ -694,6 +750,8 @@ GO.enrichment(genes.in.module(2), gene.universe.modules, ontology = "BP") %>%
 ```
 
 ### Enriched GO terms in module 3
+*Table S16*: Results of GO term enrichment analysis for the genes in Module 3. The gene universe used was defined as all genes for which we found an ortholog in all four species.
+ <br/><br/> 
 <input type=button class=hideshow></input>
 ```{r}
 GO.enrichment(genes.in.module(3), gene.universe.modules, ontology = "BP") %>%
@@ -701,6 +759,8 @@ GO.enrichment(genes.in.module(3), gene.universe.modules, ontology = "BP") %>%
 ```
 
 ### Enriched GO terms in module 4
+*Table S17*: Results of GO term enrichment analysis for the genes in Module 4. The gene universe used was defined as all genes for which we found an ortholog in all four species.
+ <br/><br/> 
 <input type=button class=hideshow></input>
 ```{r}
 GO.enrichment(genes.in.module(4), gene.universe.modules, ontology = "BP") %>%
@@ -708,6 +768,8 @@ GO.enrichment(genes.in.module(4), gene.universe.modules, ontology = "BP") %>%
 ```
 
 ### Enriched GO terms in module 5
+*Table S18*: Results of GO term enrichment analysis for the genes in Module 5. The gene universe used was defined as all genes for which we found an ortholog in all four species.
+ <br/><br/> 
 <input type=button class=hideshow></input>
 ```{r}
 GO.enrichment(genes.in.module(5), gene.universe.modules, ontology = "BP") %>%
@@ -716,23 +778,28 @@ GO.enrichment(genes.in.module(5), gene.universe.modules, ontology = "BP") %>%
 
 
 ### Inspect the gene list for the pheromone-sensitive module 4
+*Table S19*: List of all the genes in Module 4, ranked by their within-module connectivity, *k*. The latter four columns give the Log2 fold-change in expression in response to queen pheromone in each of the four species.
+ <br/><br/> 
 <input type=button class=hideshow></input>
 ```{r echo=FALSE, warning=FALSE, message=FALSE}
-mod4 <- inspect.module.genes(4) 
-mod4 %>% pander(split.cell = 40, split.table = Inf)
+inspect.module.genes(4) %>% 
+  mutate(am_fc=log2(am_fc), bt_fc=log2(bt_fc), lf_fc=log2(lf_fc), ln_fc=log2(ln_fc)) %>% 
+  rename(Gene=gene, Name=name) %>% 
+  pander(split.cell = 40, split.table = Inf)
 ```
 
 ### Plot the gene list for the pheromone-sensitive module 4
 ```{r echo=FALSE, warning=FALSE, message=FALSE}
-melt(mod4[,c(2,4:7)]) %>% 
+melt(inspect.module.genes(4)[,c(2,4:7)]) %>% 
   rename(Gene = name, Species = variable, FC = value) %>% 
   mutate(FC=log2(FC), Gene = factor(Gene, levels = rev(unique(Gene)))) %>% 
   ggplot(aes(Species, Gene, fill=FC)) + geom_tile(colour="black") + 
   scale_fill_gradient2(name = "Log2(FC)", low = brewer.pal(9, "RdYlBu")[7], mid = "white", high = brewer.pal(9, "RdYlBu")[2]) +
-  scale_x_discrete(labels = c("Apis\nmellifera", "Bombus\nterrestris", "Lasius\nflavus"), expand=c(0,0)) +
-  scale_y_discrete(expand=c(0,0)) + theme_bw() + theme(panel.grid = element_blank())
-
+  scale_x_discrete(labels = c("Apis\nmellifera", "Bombus\nterrestris", "Lasius\nflavus", "Lasius\nniger"), expand=c(0,0)) +
+  scale_y_discrete(expand=c(0,0)) + theme_bw() + theme(panel.grid = element_blank(), axis.text.x = element_text(face = "italic"))
 ```
+ <br/><br/> 
+ *Figure S7*: Change in expression for all the genes in Module 4, in each species (i.e. the same data as in Table S19). The genes are ranked from most (top) to least (bottom) connected, using within-module connectedness. Genes in this module were mostly upregualted in _A. mellifera_ and downregualted in the other species (the colour shows log fold-change in expression in response to queen pheromone). 
 
 
 
