@@ -1,15 +1,22 @@
 ---
-title: "Queen pheromone gene expression analysis"
-author: "Sasha Mikheyev and Luke Holman"
-date: "5/3/2017"
+title: "Online Supplementary Material"
+author: "Queen pheromones have conserved effects on gene expression in social insects separated by 150MY of evolution"
 output:
   html_document:
     toc: true # table of content true
+    toc_float: true
     depth: 3  # upto three depths of headings (specified by #, ## and ###)
     number_sections: false  ## if you want number sections at each table header
     theme: united 
+    code_folding: hide
   pdf_document: default
 ---
+
+```{r echo=FALSE, results='hide'}
+library(knitr) # set up cacheing to save time when re-building html document
+```
+`r opts_chunk$set(cache=TRUE)`
+
 
 ### Load R libraries (install first from CRAN or Bioconductor)
 ```{r message=FALSE, warning=FALSE, results="hide"}
@@ -40,10 +47,11 @@ my_db <- src_sqlite("data/queen pheromone.db")
 bad.samples <- c("lf1", "ln1", "ln12", "lf12")
 ```
 
+
 ### First let's check for and remove strongly outlying samples
 
 Define a function to get gene expression data for a given set of orthologous genes. We define orthologous genes as those that are each other's reciprocal best BLAST. The bad.samples argument can be used to remove some named samples. By default this function logs the expression data (using log10). It returns a list with two elements: the first element is a matrix of expression data (rows = samples, cols = genes), and the second is a data frame giving the species-specific names of the orthologous genes
-```{r}
+```{r make.OGGs}
 make.OGGs <- function(species, bad.samples = NULL, log.data = T){
   
   # set up forward mappings, e.g. "am2bt", "am2lf", "am2ln"
@@ -136,9 +144,6 @@ expression.data <- make.OGGs(c("am", "bt", "ln", "lf"), bad.samples = bad.sample
 
 shhh <- capture.output(nmds.output <- dist(expression.data) %>% nmds())
 data.frame(id = rownames(expression.data), nmds.output$conf[[length(nmds.output$conf)]], stringsAsFactors = F) %>% left_join(treatments, by = "id")  %>% ggplot(aes(X1,X2)) + geom_point(aes(shape = species, colour = treatment)) + geom_text_repel(aes(label = id), size=3.6) + xlab("NMDS 1") + ylab("NMDS 2")
-
-# Check that everything is ok with the data, as judged by WGCNA package - yes it is
-goodSamplesGenes(expression.data)$allOK
 ```
 
 
@@ -173,7 +178,7 @@ rho <- numeric(nrow(species.combinations))
 p <- numeric(nrow(species.combinations))
 for(i in 1:nrow(species.combinations)){
   fc.data <- get.fc.for.pair.species(species.combinations[i, 1], species.combinations[i,2])
-  fc.data[,3:4] <- fc.data[,3:4] %>% log10 # Log the fold changes
+  fc.data[,3:4] <- fc.data[,3:4] %>% log2 # Log the fold changes - not that it matters for Spearman's!
   results <- suppressWarnings(with(fc.data, cor.test(fc.data[,3], fc.data[,4], method="spearman"))) # Spearman's correlation
   rho[i] <- results$estimate
   p[i] <- results$p.value
@@ -250,58 +255,38 @@ JOIN
 ```
 
 ### Genes showing pheromone-induced alternative splicing in _A. mellifera_
+<input type=button class=hideshow></input>
 ```{r}
 am.alt.splice <- find.alternatively.spliced.genes("am")
 pander(am.alt.splice, split.cell = 40, split.table = Inf)
 ```
 
 ### Genes showing pheromone-induced alternative splicing in _L. flavus_
+<input type=button class=hideshow></input>
 ```{r}
 lf.alt.splice<- find.alternatively.spliced.genes("lf")
 pander(lf.alt.splice, split.cell = 40, split.table = Inf)
 ```
 
 ### Genes showing pheromone-induced alternative splicing in _L. niger_
+<input type=button class=hideshow></input>
 ```{r}
 ln.alt.splice <- find.alternatively.spliced.genes("ln")
 pander(ln.alt.splice, split.cell = 40, split.table = Inf)
 ```
 
+### There are no genes showing pheromone-sensitive splicing for _B. terrestris_
 ```{r}
-find.alternatively.spliced.genes("bt")  # There are none for B. terrestris
+find.alternatively.spliced.genes("bt")  
 ```
 
-### There is some overlap of pheromone-sensitive alternatively-spliced genes
+### There is little overlap of pheromone-sensitive alternatively-spliced genes
 ```{r}
-venn(list(Apis = am.alt.splice$name,`L. flavus` = lf.alt.splice$name,`L. niger` = ln.alt.splice$name))
+lf.alt <- lf.alt.splice$name[lf.alt.splice$name != " "] # Exclude genes with no A. mellifera names
+ln.alt <- ln.alt.splice$name[ln.alt.splice$name != " "]
+venn(list(Apis = am.alt.splice$name,`L. flavus` = lf.alt,`L. niger` = ln.alt))
 ```
 
-
-<!-- ## Inspect the GO terms associated with each of the differentially-spliced genes -->
-<!-- ```{r} -->
-<!-- go.analysis.splicing <- function(splice.results, ontology){ -->
-
-<!--   # Only include genes where we know the ortholog in Apis -->
-<!--   if("Amel_ortholog" %in% names(splice.results)) splice.results <- splice.results %>% -->
-<!--       filter(!is.na(Amel_ortholog)) %>%  -->
-<!--       select(-gene) %>% rename(gene = Amel_ortholog) -->
-
-<!--   go.terms <- tbl(my_db, "bee_go") %>% filter(gene %in% splice.results$gene) %>% collect(n = Inf) %>% as.data.frame() -->
-
-<!--   output <- left_join(go.terms, tbl(my_db, "go_meanings"), by = "GO", copy = T)  -->
-<!--   output <- cbind(left_join(data.frame(gene = output$gene, stringsAsFactors = F),  -->
-<!--                             tbl(my_db, "bee_names"), copy = T, by = "gene"), -->
-<!--                        output[,-1]) -->
-<!--   if(ontology == "BP") output <- output %>% filter(ontology == "BP") -->
-<!--   if(ontology == "CC") output <- output %>% filter(ontology == "CC") -->
-<!--   if(ontology == "MF") output <- output %>% filter(ontology == "MF") -->
-<!--   output %>% select(-ontology)  -->
-<!-- } -->
-
-<!-- go.analysis.splicing(am.alt.splice, "BP") -->
-<!-- go.analysis.splicing(lf.alt.splice, "BP") -->
-<!-- go.analysis.splicing(ln.alt.splice, "BP") -->
-<!-- ``` -->
 
 ## Gene co-expression network analysis
 
@@ -364,18 +349,6 @@ rearrange.eigengene.data <- function(network.list){
 } 
 
 
-# Make a plot of the module eigengenes, split by species, module and treatment
-treatments.network.plot <- function(dat){ 
-  dat %>% ggplot(aes(Species, Eigengene, fill = Treatment)) + 
-    geom_hline(yintercept = 0, colour="grey", linetype=2) + 
-    geom_boxplot() + 
-    facet_wrap(~Module) + 
-    xlab(NULL) + 
-    scale_x_discrete(labels = c("Apis\nmellifera", "Bombus\nterrestris", "Lasius\nflavus", "Lasius\nniger")) + theme_bw() + 
-    theme(legend.position=c(0.9,0.1), panel.grid = element_blank(), strip.background = element_blank(), axis.text.x = element_text(face = "italic"))
-}
-
-
 # Run a model selection analysis on each module. The full linear model has eigengene as the response variable, and treatment, species and treatment:species as predictors. We rank the 5 possible models using their AIC scores, and test which provides the best fit to the data (the 'delta' and 'weight' parameters reveal the difference in explantory power)
 run.stats <- function(dat){
   
@@ -430,17 +403,30 @@ table(network[[1]]$colors)
 
 ### Make a plot of the module eigengenes
 ```{r}
+# Make a plot of the module eigengenes, split by species, module and treatment
+treatments.network.plot <- function(dat){ 
+  dat %>% ggplot(aes(Species, Eigengene, fill = Treatment)) + 
+    geom_hline(yintercept = 0, colour="grey", linetype=2) + 
+    geom_boxplot() + 
+    facet_wrap(~Module) + 
+    xlab(NULL) + 
+    scale_x_discrete(labels = c("Apis\nmellifera", "Bombus\nterrestris", "Lasius\nflavus", "Lasius\nniger")) + theme_bw() + 
+    theme(legend.position=c(0.9,0.1), panel.grid = element_blank(), strip.background = element_blank(), axis.text.x = element_text(face = "italic"))
+}
+
 eigen.data %>% treatments.network.plot
 ```
 
 ### Run model selection analysis to test for treatment and species effects on eigengenes
 The models are listed from best to worst for each module. The delta column gives the different in AICc scores between the focal model and the top model in the set, where delta > 2 is considered to be a significant improvement in model fit. The column 'weight' gives Akaike weights, which can be interpreted as probabilities that the focal model is the top model in the set given the data.
+
+<input type=button class=hideshow></input>
 ```{r}
 run.stats(eigen.data) %>% pander
 ```
 
 ### Plot the correlations between all modules and the pheromone treatment
-```{r echo = FALSE}
+```{r}
 meta.module.plot <- function(network){
  
   MET <- network[[1]]$MEs 
@@ -466,18 +452,19 @@ meta.module.plot(network)
 ```
 
 
-
-## GO term enrichment
+## GO term enrichment for differentially _expressed_ genes
 First, define some functions we will need. See also the R script "Script to set up for GO analyses.R", which was used to make the object gene_set_collection.RData, following instructions for making a GO annotation for a non-model organism at http://bioconductor.org/packages/2.11/bioc/vignettes/GOstats/inst/doc/GOstatsForUnsupportedOrganisms.pdf.
-```{r}
+
+There are only two differentially expressed genes for _B. terrestris_, so it is only meaningful to test for enriched GO terms in the other three species.
+```{r warnings = FALSE}
 GO.enrichment <- function(enriched.genes, gene.universe, ontology){
   params <- GSEAGOHyperGParams(name="Luke's Params",
-                               geneSetCollection = gene_set_collection,
+                               geneSetCollection = gene_set_collection, # Custom GO annotations for all the OGGs
                                geneIds = enriched.genes,
                                universeGeneIds = gene.universe,
                                ontology = ontology, # Can be BP, MF, or CC
                                pvalueCutoff = 0.05,
-                               conditional = FALSE, # don't condition on the GO structure
+                               conditional = TRUE, # Do the test conditional on the GO structure
                                testDirection = "over") # Look for over-represented GO terms, not under
   Over <- hyperGTest(params)
   
@@ -491,6 +478,7 @@ genes.in.module <- function(module.number){
   colnames(OGGs[[1]])[which(network[[1]]$colors == paste("Module", module.number))]
 }
 
+# Get the gene names, and sensitivity to pheromone, for genes in a certain module
 inspect.module.genes <- function(module){
   gene.names <- tbl(my_db, "bee_names") %>% as.data.frame()
   gene.names <- gene.names[gene.names$gene %in% genes.in.module(module), ]
@@ -500,13 +488,12 @@ inspect.module.genes <- function(module){
   
   am <- tbl(my_db, "ebseq_gene_am") %>% as.data.frame()
   gene.names$am_fc <- am$PostFC[match(gene.names$gene, am$gene)]
-  bt <- tbl(my_db, "ebseq_gene_bt") %>% rename(bt = gene) %>% left_join(tbl(my_db, "bt2am"))
+  bt <- tbl(my_db, "ebseq_gene_bt") %>% rename(bt = gene) %>% left_join(tbl(my_db, "bt2am")) %>% as.data.frame()
   gene.names$bt_fc <- bt$PostFC[match(gene.names$gene, bt$am)]
-  lf <- tbl(my_db, "ebseq_gene_lf") %>% rename(lf = gene) %>% left_join(tbl(my_db, "lf2am"))
+  lf <- tbl(my_db, "ebseq_gene_lf") %>% rename(lf = gene) %>% left_join(tbl(my_db, "lf2am")) %>% as.data.frame()
   gene.names$lf_fc <- lf$PostFC[match(gene.names$gene, lf$am)]
-  ln <- tbl(my_db, "ebseq_gene_ln") %>% rename(ln = gene) %>% left_join(tbl(my_db, "ln2am"))
+  ln <- tbl(my_db, "ebseq_gene_ln") %>% rename(ln = gene) %>% left_join(tbl(my_db, "ln2am")) %>% as.data.frame()
   gene.names$ln_fc <- ln$PostFC[match(gene.names$gene, ln$am)]
-  print(gene.names)
   row.names(gene.names) <- NULL
   gene.names
 }
@@ -518,10 +505,9 @@ load("data/gene_set_collection.RData")
 load("blockwiseTOM-block.1.RData")
 ```
 
-## GO term enrichment for differentially _expressed_ genes
-There are only two differentially expressed genes for B. terrestris, so it is only meaningful to test for enriched GO terms in the other three species.
 
 ### Enriched GO terms for differentially expressed genes in _A. mellifera_
+<input type=button class=hideshow></input>
 ```{r}
 gene.universe.apis <- (tbl(my_db, "rsem_am") %>% 
                          as.data.frame())$gene
@@ -532,6 +518,7 @@ GO.enrichment(diff.expressed.apis, gene.universe.apis, ontology = "BP") %>%
 
 
 ### Enriched GO terms for differentially expressed genes in _L. flavus_
+<input type=button class=hideshow></input>
 ```{r}
 # The gene universe is all L. flavus genes for which we found a BLAST hit in Apis mellifera
 gene.universe.flavus <- (left_join(tbl(my_db, "rsem_lf") %>% 
@@ -549,7 +536,8 @@ GO.enrichment(diff.expressed.flavus, gene.universe.flavus, ontology = "BP") %>%
   pander(split.cell = 40, split.table = Inf)
 ```
 
-### Enriched GO terms for differentially expressed genes in _L. niger
+### Enriched GO terms for differentially expressed genes in _L. niger_
+<input type=button class=hideshow></input>
 ```{r}
 # The gene universe is all L. niger genes for which we found a BLAST hit in Apis mellifera
 gene.universe.niger <- (left_join(tbl(my_db, "rsem_ln") %>% 
@@ -595,17 +583,22 @@ all.overlaps <- rbind(overlap.thrice, overlap.apis.flavus, overlap.apis.niger, o
 all.overlaps <- all.overlaps[!duplicated(all.overlaps$name), ]
 names(all.overlaps)[1:2] <- c("Gene", "Name")
 rownames(all.overlaps) <- NULL
+```
+
+<input type=button class=hideshow></input>
+```{r}
 pander(all.overlaps, split.cell = 40, split.table = Inf)
 ```
 
-### Venn diagram showing number of over-lapping differentially expressed genes
-```{r echo = FALSE}
+### Venn diagram showing number of overlapping differentially expressed genes
+```{r}
 venn(list(Apis = diff.expressed.apis,`L. flavus` = diff.expressed.flavus,`L. niger` = diff.expressed.niger))
 ```
 
 
 
-### GO term enrichment for genes that are affected by queen pheromone in 2 or 3 species
+### GO term enrichment for genes whose expression is affected by queen pheromone in more than one species
+<input type=button class=hideshow></input>
 ```{r}
 GO.enrichment(all.overlaps$Gene %>% unique, gene.universe.apis, ontology = "BP") %>%
   pander(split.cell = 40, split.table = Inf)
@@ -622,7 +615,10 @@ gene.universe.apis.splicing <- (tbl(my_db, "isoforms_am") %>%
                                   summarise(nIsoforms = n()) %>% filter(nIsoforms > 1) %>% 
                                   as.data.frame() %>% 
                                   dplyr::select(gene) %>% as.data.frame())[,1]
+```
 
+<input type=button class=hideshow></input>
+```{r}
 GO.enrichment(am.alt.splice$gene, gene.universe.apis.splicing, ontology = "BP") %>%
   pander(split.cell = 40, split.table = Inf)
 ```
@@ -643,7 +639,10 @@ gene.universe.flavus.splicing <- (tbl(my_db, "lf2am") %>%  # Convert to Apis gen
 alt.spliced.flavus <- (tbl(my_db, "lf2am") %>% 
                          filter(lf %in% lf.alt.splice$gene) %>% 
                          dplyr::select(am) %>% filter(!is.na(am)) %>% as.data.frame())[,1]
+```
 
+<input type=button class=hideshow></input>
+```{r}
 GO.enrichment(alt.spliced.flavus, gene.universe.flavus, ontology = "BP") %>%
   pander(split.cell = 40, split.table = Inf)
 ```
@@ -664,7 +663,10 @@ gene.universe.niger.splicing <- (tbl(my_db, "ln2am") %>%  # Convert to Apis gene
 alt.spliced.niger <- (tbl(my_db, "ln2am") %>% 
                         filter(ln %in% ln.alt.splice$gene) %>% 
                         dplyr::select(am)%>% filter(!is.na(am)) %>% as.data.frame())[,1]
+```
 
+<input type=button class=hideshow></input>
+```{r}
 GO.enrichment(alt.spliced.niger, gene.universe.niger.splicing, ontology = "BP") %>%
   pander(split.cell = 40, split.table = Inf)
 ```
@@ -673,49 +675,86 @@ GO.enrichment(alt.spliced.niger, gene.universe.niger.splicing, ontology = "BP") 
 ## GO term enrichment for transcriptional modules
 ```{r echo=FALSE}
 # For the module GO tests, the gene universe is genes that are present in the network
-gene.universe <- OGGs[[2]]$am 
+gene.universe.modules <- OGGs[[2]]$am 
 ```
 
 
 ### Enriched GO terms in module 1
-```{r echo=FALSE}
-GO.enrichment(genes.in.module(1), gene.universe, ontology = "BP") %>%
+<input type=button class=hideshow></input>
+```{r}
+GO.enrichment(genes.in.module(1), gene.universe.modules, ontology = "BP") %>%
   pander(split.cell = 40, split.table = Inf)
 ```
 
 ### Enriched GO terms in module 2
-```{r echo=FALSE}
-GO.enrichment(genes.in.module(2), gene.universe, ontology = "BP") %>%
+<input type=button class=hideshow></input>
+```{r}
+GO.enrichment(genes.in.module(2), gene.universe.modules, ontology = "BP") %>%
   pander(split.cell = 40, split.table = Inf)
 ```
 
 ### Enriched GO terms in module 3
-```{r echo=FALSE}
-GO.enrichment(genes.in.module(3), gene.universe, ontology = "BP") %>%
+<input type=button class=hideshow></input>
+```{r}
+GO.enrichment(genes.in.module(3), gene.universe.modules, ontology = "BP") %>%
   pander(split.cell = 40, split.table = Inf)
 ```
 
 ### Enriched GO terms in module 4
-```{r echo=FALSE}
-GO.enrichment(genes.in.module(4), gene.universe, ontology = "BP") %>%
+<input type=button class=hideshow></input>
+```{r}
+GO.enrichment(genes.in.module(4), gene.universe.modules, ontology = "BP") %>%
   pander(split.cell = 40, split.table = Inf)
 ```
 
 ### Enriched GO terms in module 5
-```{r echo=FALSE}
-GO.enrichment(genes.in.module(5), gene.universe, ontology = "BP") %>%
+<input type=button class=hideshow></input>
+```{r}
+GO.enrichment(genes.in.module(5), gene.universe.modules, ontology = "BP") %>%
   pander(split.cell = 40, split.table = Inf)
 ```
 
 
 ### Inspect the gene list for the pheromone-sensitive module 4
-```{r echo=FALSE}
-inspect.module.genes(4) %>% pander(split.cell = 40, split.table = Inf)
+<input type=button class=hideshow></input>
+```{r echo=FALSE, warning=FALSE, message=FALSE}
+mod4 <- inspect.module.genes(4) 
+mod4 %>% pander(split.cell = 40, split.table = Inf)
 ```
 
-```{r echo=FALSE}
-unlink("blockwiseTOM-block.1.RData") # Delete this to save memory
+### Plot the gene list for the pheromone-sensitive module 4
+```{r echo=FALSE, warning=FALSE, message=FALSE}
+melt(mod4[,c(2,4:7)]) %>% 
+  rename(Gene = name, Species = variable, FC = value) %>% 
+  mutate(FC=log2(FC), Gene = factor(Gene, levels = rev(unique(Gene)))) %>% 
+  ggplot(aes(Species, Gene, fill=FC)) + geom_tile(colour="black") + 
+  scale_fill_gradient2(name = "Log2(FC)", low = brewer.pal(9, "RdYlBu")[7], mid = "white", high = brewer.pal(9, "RdYlBu")[2]) +
+  scale_x_discrete(labels = c("Apis\nmellifera", "Bombus\nterrestris", "Lasius\nflavus"), expand=c(0,0)) +
+  scale_y_discrete(expand=c(0,0)) + theme_bw() + theme(panel.grid = element_blank())
+
 ```
+
+
+
+<!-- Some JavaScript to control the buttons to show/hide the big tables -->
+<script>
+$( "input.hideshow" ).each( function ( index, button ) {
+  button.value = 'Hide Output';
+  $( button ).click( function () {
+    var target = this.nextSibling ? this : this.parentNode;
+     target = target.nextSibling.nextSibling.nextSibling.nextSibling.nextSibling;
+    if ( target.style.display == 'block' || target.style.display == '' ) {
+      target.style.display = 'none';
+      this.value = 'Show Output';
+    } else {
+      target.style.display = 'block';
+      this.value = 'Hide Output';
+    }
+  } );
+} );
+</script>
+
+
 
 
 <!-- ## Now plot the network to look at the modules that we identified -->
