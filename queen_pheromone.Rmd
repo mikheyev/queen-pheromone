@@ -138,9 +138,6 @@ data.frame(id = rownames(expression.data), nmds.output$conf[[length(nmds.output$
   left_join(treatments, by = "id") %>% 
   rename(Species = species, Treatment = treatment) %>%
   ggplot(aes(X1,X2, shape = Species)) + geom_point(aes(colour = Treatment)) + geom_text_repel(aes(label = id), size=3.6) + xlab("NMDS 1") + ylab("NMDS 2")
-
-
-bad.samples <- c("lf1", "ln1", "ln12", "lf12")
 ```
  <br/><br/> 
 *Figure S1*: After reducing the transcriptome data to two axes using non-metric multidimensional scaling, four _Lasius_ samples are clear outliers.
