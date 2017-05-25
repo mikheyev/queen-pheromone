@@ -127,7 +127,7 @@ gene.name.mappings <- gene.name.mappings[to.keep, ]
 
 
 #### 4 of the _Lasius_ samples are highly different to all of the rest
-Closer inspection reveals that they are have zeros for many of the transcripts, so perhaps they had fragemented/low abundance libraries.
+Closer inspection reveals that they have zeros for many of the transcripts, so perhaps they had low abundance libraries.
 ```{r outliers}
 set.seed(1) # nmds involves random numbers, so make this plot reproducible
 expression.data <- make.OGGs(c("am", "bt", "ln", "lf"))[[1]]
@@ -275,7 +275,7 @@ pander(overlaps, split.cell = 40, split.table = Inf)
 venn(list(Apis = diff.expressed.apis,`L. flavus` = diff.expressed.flavus,`L. niger` = diff.expressed.niger))
 ```
  <br/><br/> 
- *Figure S6*: Venn diagram showing number significantly differentially expressed genes in each species, as well as the overlap.
+ *Figure S3*: Venn diagram showing number significantly differentially expressed genes in each species, as well as the overlap.
 
 
 
@@ -345,7 +345,7 @@ species.combinations %>% ggplot(aes(Species1, Species2, fill=rho)) + geom_tile(c
   scale_y_discrete(labels = c("Bombus\nterrestris", "Lasius\nflavus", "Lasius\nniger"), expand = c(0,0)) 
 ```
  <br/><br/> 
- *Figure S3*: Results of Spearman's rank correlations, testing whether the fold-change in gene expression in response to queen pheromone is correlated for a given pair of species. The colour shows the correlation (Spearman's rho), where red  indicates that on average, orthologous genes are affected in the same direction by queen pheromones, and blue indicates the reverse. The stars show the degree of statistical significance (\*: p < 0.05, \*\* p < 0.01, \*\*\* p < 0.0001).
+ *Figure S4*: Results of Spearman's rank correlations, testing whether the fold-change in gene expression in response to queen pheromone is correlated for a given pair of species. The colour shows the correlation (Spearman's rho), where red  indicates that on average, orthologous genes are affected in the same direction by queen pheromones, and blue indicates the reverse. The stars show the degree of statistical significance (\*: p < 0.05, \*\* p < 0.01, \*\*\* p < 0.0001).
 
 ## Identifying genes that splice differently following queen pheromone treatment
 
@@ -407,7 +407,7 @@ JOIN
 ```
 
 ### Genes showing pheromone-induced alternative splicing in _A. mellifera_
-*Table S6*: List of genes showing statistically significant pheromone-induced alternative splicing in _A. mellifera_. These genes were defined as those that have at least two isoforms that are differentially expressed following pheromone treatment with p < 1e-05, and for which one isoform increases in expression while another decreases. The last two columns show the fold changes of the most down-regulated and most up-regulated isoforms, on a Log2 scale.
+*Table S6*: List of genes showing statistically significant pheromone-induced alternative splicing in _A. mellifera_. These genes were defined as those that have at least two isoforms that are differentially expressed following pheromone treatment with p < 10^-5^, and for which one isoform increases in expression while another decreases. The last two columns show the fold changes of the most down-regulated and most up-regulated isoforms, on a Log2 scale.
  <br/><br/> 
 <input type=button class=hideshow></input>
 ```{r am.splice}
@@ -580,7 +580,7 @@ treatments.network.plot <- function(dat){
 eigen.data %>% treatments.network.plot
 ```
  <br/><br/> 
- *Figure S4*: The Figure shows the distribution of module eigengenes for each combination of module, species, and queen pheromone (QP) treatment. Positive values mean that the focal group has higher eigengenes, which derived from the relative expression levels of a module of genes, than the average. Queen pheromone treatment had a statistically significant effect on eigengenes for module 5. 
+ *Figure S5*: The Figure shows the distribution of module eigengenes for each combination of module, species, and queen pheromone (QP) treatment. Positive values mean that the focal group has higher eigengenes, which derived from the relative expression levels of a module of genes, than the average. Queen pheromone treatment had a statistically significant effect on eigengenes for module 5. 
 
 
 
@@ -619,7 +619,7 @@ meta.module.plot <- function(network){
 meta.module.plot(network)
 ```
  <br/><br/> 
- *Figure S5*: Dendrogram and heat map showing the correlations among module eigengene values and the queen pheromone treatment (QP; coded as zero and 1 for the control and treatment respectively). Modules with red colour, or which are close on the dendrogram, show more correlated expression. The queen pheromone treatment was correlated with Module 5, but was relatively uncorrelated with the other modules.
+ *Figure S6*: Dendrogram and heat map showing the correlations among module eigengene values and the queen pheromone treatment (QP; coded as zero and 1 for the control and treatment respectively). Modules with red colour, or which are close on the dendrogram, show more correlated expression. The queen pheromone treatment was correlated with Module 5, but was relatively uncorrelated with the other modules.
 
 ## GO term enrichment for differentially _expressed_ genes
 First, define some functions we will need. See also the R script "Script to set up for GO analyses.R", which was used to make the object gene_set_collection.RData, following instructions for making a GO annotation for a non-model organism at http://bioconductor.org/packages/2.11/bioc/vignettes/GOstats/inst/doc/GOstatsForUnsupportedOrganisms.pdf.
@@ -892,7 +892,7 @@ GO.enrichment(genes.in.module(5), gene.universe.modules, ontology = "BP") %>%
 ```
 
 
-### Inspect the gene list for the pheromone-sensitive module 5
+## Inspect the gene list for the pheromone-sensitive module 5
 *Table S25*: List of all the genes in Module 5, ranked by their within-module connectivity, *k*. The latter four columns give the Log2 fold-change in expression in response to queen pheromone in each of the four species.
  <br/><br/> 
 <input type=button class=hideshow></input>
