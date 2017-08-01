@@ -336,20 +336,6 @@ pander(overlap.p.values, split.cell = 40, split.table = Inf)
 
 
 
-
-
-
-<!-- ### Venn diagram showing number of overlapping differentially expressed genes -->
-<!-- ```{r expr.venn} -->
-<!-- venn(list(Apis = diff.expressed.apis,`L. flavus` = diff.expressed.flavus,`L. niger` = diff.expressed.niger)) -->
-<!-- ``` -->
-<!--  <br/><br/>  -->
-<!--  *Figure S3*: Venn diagram showing number significantly differentially expressed genes in each species, as well as the overlap. -->
-
-
-
-
-
 ## Correlations in pheromone-sensitive gene expression across species
 
 These tests ask if genes that are up-regulated in the queen pheromone treatment in one species are also up (or down) regulated in another. These tests used fold expression changes calculated using ebseq, after omitting the four irregular Lasius samples. The advantage of these tests is that one is not limited to the set of 'significant' genes, which discards a lot of information based on an arbitrary p-value threshold.
@@ -419,7 +405,7 @@ heat.map.figure
 # ggsave(heat.map.figure, file = "Correlations heat map.pdf", height = 4, width=4.3)
 ```
  <br/><br/> 
- *Figure S4*: Results of Spearman's rank correlations, testing whether the fold-change in gene expression in response to queen pheromone is correlated for a given pair of species. The colour shows the correlation (Spearman's rho), where red  indicates that on average, orthologous genes are affected in the same direction by queen pheromones, and blue indicates the reverse. The stars show the degree of statistical significance (\*: p < 0.05, \*\* p < 0.01, \*\*\* p < 0.0001).
+ *Figure S3*: Results of Spearman's rank correlations, testing whether the fold-change in gene expression in response to queen pheromone is correlated for a given pair of species. The colour shows the correlation (Spearman's rho), where red  indicates that on average, orthologous genes are affected in the same direction by queen pheromones, and blue indicates the reverse. The stars show the degree of statistical significance (\*: p < 0.05, \*\* p < 0.01, \*\*\* p < 0.0001).
 
 ## Identifying genes that splice differently following queen pheromone treatment
 
@@ -658,7 +644,7 @@ eigen.data %>% treatments.network.plot
 # ggsave(eigen.data %>% treatments.network.plot, file = "Module eigengenes.pdf", height = 5.7, width = 8)
 ```
  <br/><br/> 
- *Figure S5*: The Figure shows the distribution of module eigengenes for each combination of module, species, and queen pheromone (QP) treatment. Positive values mean that the focal group has higher eigengenes, which derived from the relative expression levels of a module of genes, than the average. Queen pheromone treatment had a statistically significant effect on eigengenes for module 5. 
+ *Figure S4*: The figure shows the distribution of module eigengenes for each combination of module, species, and queen pheromone (QP) treatment. Positive values mean that the focal group has higher eigengenes, which derived from the relative expression levels of a module of genes, than the average. Queen pheromone treatment had a statistically significant effect on eigengenes for module 5. 
 
 
 
@@ -697,7 +683,7 @@ meta.module.plot <- function(network){
 meta.module.plot(network)
 ```
  <br/><br/> 
- *Figure S6*: Dendrogram and heat map showing the correlations among module eigengene values and the queen pheromone treatment (QP; coded as zero and 1 for the control and treatment respectively). Modules with red colour, or which are close on the dendrogram, show more correlated expression. The queen pheromone treatment was correlated with Module 5, but was relatively uncorrelated with the other modules.
+ *Figure S5*: Dendrogram and heat map showing the correlations among module eigengene values and the queen pheromone treatment (QP; coded as zero and 1 for the control and treatment respectively). Modules with red colour, or which are close on the dendrogram, show more correlated expression. The queen pheromone treatment was correlated with Module 5, but was relatively uncorrelated with the other modules.
 
 
 *Table S12*: Results of Spearman's rank correlations testing for a relationship between the effect of queen pheromone on gene expression, and the connectedness of the gene. Positive values of Spearman's Rho mean that connected genes tended to be down-regulated by queen pheromone, while negative values mean the opposite.
@@ -726,19 +712,21 @@ pander(results)
  
  
 
-## GO and KEGG enrichment for differentially _expressed_ genes
+## KEGG and GO enrichment for differentially _expressed_ genes
 First, define some functions we will need. See also the R script "Script to set up for GO analyses.R", which was used to make the object gene_set_collection.RData, following instructions for making a GO annotation for a non-model organism at http://bioconductor.org/packages/2.11/bioc/vignettes/GOstats/inst/doc/GOstatsForUnsupportedOrganisms.pdf.
 
 There are only two differentially expressed genes for _B. terrestris_, so it is only meaningful to test for enriched GO/KEGG terms in the other three species.
 ```{r module.funs, warnings = FALSE}
-GO.and.KEGG.enrichment <- function(enriched.genes, gene.universe, ontology){
+GO.and.KEGG.enrichment <- function(enriched.genes, gene.universe, ontology, pan = TRUE, keep.all = FALSE){
+  p <- 0.05
+  if(keep.all) p <- 1
   GO.enrichment <- function(enriched.genes, gene.universe, ontology){
     params <- GSEAGOHyperGParams(name="Luke's Params",
-                                 geneSetCollection = gene_set_collection, # Custom GO annotations for all the OGGs
+                                 geneSetCollection = gene_set_collection, # custom GO annotations 
                                  geneIds = enriched.genes,
                                  universeGeneIds = gene.universe,
                                  ontology = ontology, # Can be BP, MF, or CC
-                                 pvalueCutoff = 0.05,
+                                 pvalueCutoff = p,
                                  conditional = TRUE, # Do the test conditional on the GO structure
                                  testDirection = "over") # Look for over-represented GO terms, not under
     summary(hyperGTest(params)) %>% mutate(Pvalue = format(round(Pvalue, 5), nsmall = 3),
@@ -749,10 +737,10 @@ GO.and.KEGG.enrichment <- function(enriched.genes, gene.universe, ontology){
   
   kegg.enrichment <- function(enriched.genes, gene.universe){
     params <- GSEAKEGGHyperGParams(name="Luke's Params",
-                                   geneSetCollection = gene_set_collection_kegg, # Custom KEGG annotations for all the OGGs
+                                   geneSetCollection = gene_set_collection_kegg, # custom KEGG annotations 
                                    geneIds = enriched.genes,
                                    universeGeneIds = gene.universe,
-                                   pvalueCutoff = 0.05,
+                                   pvalueCutoff = p,
                                    testDirection = "over") # Look for over-represented KEGG terms, not under
     summary(hyperGTest(params)) %>% mutate(Pvalue = format(round(Pvalue, 5), nsmall = 3),
                                            OddsRatio = format(round(OddsRatio, 3), nsmall = 3),
@@ -761,9 +749,9 @@ GO.and.KEGG.enrichment <- function(enriched.genes, gene.universe, ontology){
       rename(ID = KEGGID)
   }
   
-  rbind(kegg.enrichment(enriched.genes, gene.universe),
-        GO.enrichment(enriched.genes, gene.universe, ontology)) %>%
-  pander(split.cell = 40, split.table = Inf)
+  output <- rbind(kegg.enrichment(enriched.genes, gene.universe), GO.enrichment(enriched.genes, gene.universe, ontology)) 
+  if(!pan) return(output)
+  output %>% pander(split.cell = 40, split.table = Inf)
 }
 
 # Find the names for the genes in a given module
@@ -800,8 +788,8 @@ load("data/gene_set_collection_kegg.RData")
 ```
 
 
-### GO and KEGG enrichment for differentially expressed genes in _A. mellifera_
-*Table S12*: Results of GO and KEGG enrichment analysis on the list of genes that were significantly upregulated in the **control** group in _A. mellifera_. The gene universe was defined as all _A. mellifera_ genes measured in this study.
+### KEGG and GO enrichment for differentially expressed genes in _A. mellifera_
+*Table S12*: Results of KEGG and GO enrichment analysis on the list of genes that were significantly upregulated in the **control** group in _A. mellifera_. The gene universe was defined as all _A. mellifera_ genes measured in this study.
  <br/><br/> 
 <input type=button class=hideshow></input>
 ```{r apis.up.exp.go}
@@ -811,7 +799,7 @@ up.in.control.apis <- (apis.de %>% filter(`Log2 FC` > 0) %>% as.data.frame())$Ge
 suppressMessages(GO.and.KEGG.enrichment(up.in.control.apis, gene.universe.apis, ontology = "BP") )
 ```
 
-*Table S13*: Results of GO and KEGG enrichment analysis on the list of genes that were significantly upregulated in the **queen pheromone** treatment in _A. mellifera_. The gene universe was defined as all _A. mellifera_ genes measured in this study.
+*Table S13*: Results of KEGG and GO enrichment analysis on the list of genes that were significantly upregulated in the **queen pheromone** treatment in _A. mellifera_. The gene universe was defined as all _A. mellifera_ genes measured in this study.
  <br/><br/> 
 <input type=button class=hideshow></input>
 ```{r apis.down.exp.go, showWarnings = FALSE}
@@ -821,8 +809,8 @@ GO.and.KEGG.enrichment(up.in.QP.apis, gene.universe.apis, ontology = "BP")
 
 
 
-### GO and KEGG enrichment for differentially expressed genes in _L. flavus_
-*Table S14*: Results of GO and KEGG enrichment analysis on the list of genes that were significantly upregulated in the **control** group in _L. flavus_. The gene universe was defined as all _L. flavus_ genes for which we detected an _A. mellifera_ ortholog.
+### KEGG and GO enrichment for differentially expressed genes in _L. flavus_
+*Table S14*: Results of KEGG and GO enrichment analysis on the list of genes that were significantly upregulated in the **control** group in _L. flavus_. The gene universe was defined as all _L. flavus_ genes for which we detected an _A. mellifera_ ortholog.
  <br/><br/> 
 <input type=button class=hideshow></input>
 ```{r flavus.up.exp.go}
@@ -840,7 +828,7 @@ up.in.control.flavus <- (flavus.de %>% filter(`Log2 FC` > 0 & `Apis BLAST` != " 
 GO.and.KEGG.enrichment(up.in.control.flavus, gene.universe.flavus, ontology = "BP")
 ```
 
-*Table S15*: Results of GO and KEGG enrichment analysis on the list of genes that were significantly upregulated in the **queen pheromone** treatment in _L. flavus_. The gene universe was defined as all _L. flavus_ genes for which we detected an _A. mellifera_ ortholog.
+*Table S15*: Results of KEGG and GO enrichment analysis on the list of genes that were significantly upregulated in the **queen pheromone** treatment in _L. flavus_. The gene universe was defined as all _L. flavus_ genes for which we detected an _A. mellifera_ ortholog.
  <br/><br/> 
 <input type=button class=hideshow></input>
 ```{r flavus.down.exp.go}
@@ -849,8 +837,8 @@ GO.and.KEGG.enrichment(up.in.QP.flavus, gene.universe.flavus, ontology = "BP")
 ```
 
 
-### GO and KEGG enrichment for differentially expressed genes in _L. niger_
-*Table S16*: Results of GO and KEGG enrichment analysis on the list of genes that were significantly upregulated in the **control** group in _L. niger_ The gene universe was defined as all _L. niger_ genes for which we detected an _A. mellifera_ ortholog.
+### KEGG and GO enrichment for differentially expressed genes in _L. niger_
+*Table S16*: Results of KEGG and GO enrichment analysis on the list of genes that were significantly upregulated in the **control** group in _L. niger_ The gene universe was defined as all _L. niger_ genes for which we detected an _A. mellifera_ ortholog.
  <br/><br/> 
 <input type=button class=hideshow></input>
 ```{r niger.up.exp.go}
@@ -868,7 +856,7 @@ up.in.control.niger <- (niger.de %>% filter(`Log2 FC` > 0 & `Apis BLAST` != " ")
 GO.and.KEGG.enrichment(up.in.control.niger, gene.universe.niger, ontology = "BP") 
 ```
 
-*Table S17*: Results of GO and KEGG enrichment analysis on the list of genes that were significantly upregulated in the **queen pheromone** treatment in _L. niger_ The gene universe was defined as all _L. niger_ genes for which we detected an _A. mellifera_ ortholog.
+*Table S17*: Results of KEGG and GO enrichment analysis on the list of genes that were significantly upregulated in the **queen pheromone** treatment in _L. niger_ The gene universe was defined as all _L. niger_ genes for which we detected an _A. mellifera_ ortholog.
  <br/><br/> 
 <input type=button class=hideshow></input>
 ```{r niger.down.exp.go}
@@ -877,8 +865,8 @@ GO.and.KEGG.enrichment(up.in.QP.niger, gene.universe.niger, ontology = "BP")
 ```
 
 
-### GO and KEGG enrichment for differentially expressed genes observed in multiple species
-*Table S18*: Results of GO and KEGG enrichment analysis on the list of genes showing significant differential expression in response to queen pheromone in two or more species. The gene universe was defined as all genes for which we found an ortholog in all four species.
+### KEGG and GO enrichment for differentially expressed genes observed in multiple species
+*Table S18*: Results of KEGG and GO enrichment analysis on the list of genes showing significant differential expression in response to queen pheromone in two or more species. The gene universe was defined as all genes for which we found an ortholog in all four species.
  <br/><br/>
 <input type=button class=hideshow></input>
 ```{r overlap.go, messages=FALSE}
@@ -887,9 +875,9 @@ suppressWarnings(GO.and.KEGG.enrichment(all.overlaps, overlap.gene.universe, ont
 ```
 
 
-## GO and KEGG enrichment for differentially spliced genes
+## KEGG and GO enrichment for differentially spliced genes
 
-### GO and KEGG enrichment for _A. mellifera_ genes showing pheromone-modulated alternative splicing
+### KEGG and GO enrichment for _A. mellifera_ genes showing pheromone-modulated alternative splicing
 ```{r apis.spl.go}
 # The gene universe is defined as all genes that have 2 or more isoforms. It would be anti-conservative if we instead included all genes, not just that are alternatively spliced
 gene.universe.apis.splicing <- (tbl(my_db, "isoforms_am") %>% 
@@ -899,14 +887,14 @@ gene.universe.apis.splicing <- (tbl(my_db, "isoforms_am") %>%
                                   dplyr::select(gene) %>% as.data.frame())[,1]
 ```
 
-*Table S19*: Results ofGO and KEGG enrichment analysis on the list of genes showing significant alternative splicing in _A. mellifera_. The gene universe was defined as all genes that showed alternative splicing in _A. mellifera_.
+*Table S19*: Results ofKEGG and GO enrichment analysis on the list of genes showing significant alternative splicing in _A. mellifera_. The gene universe was defined as all genes that showed alternative splicing in _A. mellifera_.
  <br/><br/> 
 <input type=button class=hideshow></input>
 ```{r apis.go}
 GO.and.KEGG.enrichment(am.alt.splice$Gene, gene.universe.apis.splicing, ontology = "BP") 
 ```
 
-### GO and KEGG enrichment for _L. flavus_ genes showing pheromone-modulated alternative splicing
+### KEGG and GO enrichment for _L. flavus_ genes showing pheromone-modulated alternative splicing
 ```{r flavus.spl.go}
 # For flavus and niger, we additionally have to find the best BLAST Apis genes when constructing the gene lists
 gene.universe.flavus.splicing <- (tbl(my_db, "isoforms_lf") %>% 
@@ -924,14 +912,14 @@ alt.spliced.flavus <- (tbl(my_db, "lf2am") %>%
                          dplyr::select(am) %>% filter(!is.na(am)) %>% as.data.frame())[,1]
 ```
 
-*Table S18*: Results of GO and KEGG enrichment analysis on the list of genes showing significant alternative splicing in _L. flavus_. The gene universe was defined as all genes that showed alternative splicing in _L. flavus_, which also had a known ortholog in _A. mellifera_.
+*Table S18*: Results of KEGG and GO enrichment analysis on the list of genes showing significant alternative splicing in _L. flavus_. The gene universe was defined as all genes that showed alternative splicing in _L. flavus_, which also had a known ortholog in _A. mellifera_.
  <br/><br/> 
 <input type=button class=hideshow></input>
 ```{r}
 GO.and.KEGG.enrichment(alt.spliced.flavus, gene.universe.flavus, ontology = "BP")
 ```
 
-### GO and KEGG enrichment for _L. niger_ genes showing pheromone-modulated alternative splicing
+### KEGG and GO enrichment for _L. niger_ genes showing pheromone-modulated alternative splicing
 ```{r niger.spl.go}
 gene.universe.niger.splicing <- (tbl(my_db, "isoforms_ln") %>% 
                                   group_by(gene) %>% 
@@ -949,53 +937,134 @@ alt.spliced.niger <- (tbl(my_db, "ln2am") %>%
                         dplyr::select(am)%>% filter(!is.na(am)) %>% as.data.frame())[,1]
 ```
 
-*Table S20*: Results of GO and KEGG enrichment analysis on the list of genes showing significant alternative splicing in _L. niger_. The gene universe was defined as all genes that showed alternative splicing in _L. niger_, which also had a known ortholog in _A. mellifera_.
+*Table S20*: Results of KEGG and GO enrichment analysis on the list of genes showing significant alternative splicing in _L. niger_. The gene universe was defined as all genes that showed alternative splicing in _L. niger_, which also had a known ortholog in _A. mellifera_.
 ```{r}
 GO.and.KEGG.enrichment(alt.spliced.niger, gene.universe.niger.splicing, ontology = "BP") 
 ```
 
+## Figures summarising KEGG and GO results
+These two figures help to see which KEGG and GO terms showed up more than once, and to compare _Apis_ and the two _Lasius_ species.
+```{r}
+# First, look for enriched KEGG and GO terms in all the DE gene and isoform lists jsut as before, but this time return all the results (keep.all = TRUE)
+big.table <- rbind(suppressMessages(GO.and.KEGG.enrichment(up.in.control.apis, gene.universe.apis, ontology = "BP", pan = FALSE, keep.all = TRUE) ) %>% 
+                     mutate(species = "A. mellifera", type = "Up in control"),
+                   GO.and.KEGG.enrichment(up.in.QP.apis, gene.universe.apis, ontology = "BP", pan = FALSE, keep.all = TRUE) %>% 
+                     mutate(species = "A. mellifera", type = "Up in QP"),
+                   GO.and.KEGG.enrichment(up.in.control.flavus, gene.universe.flavus, ontology = "BP", pan = FALSE, keep.all = TRUE) %>% 
+                     mutate(species = "L. flavus", type = "Up in control"),
+                   GO.and.KEGG.enrichment(up.in.QP.flavus, gene.universe.flavus, ontology = "BP", pan = FALSE, keep.all = TRUE) %>% 
+                     mutate(species = "L. flavus", type = "Up in QP"),
+                   GO.and.KEGG.enrichment(up.in.control.niger, gene.universe.niger, ontology = "BP", pan = FALSE, keep.all = TRUE) %>% 
+                     mutate(species = "L. niger", type = "Up in control"),
+                   GO.and.KEGG.enrichment(up.in.QP.niger, gene.universe.niger, ontology = "BP", pan = FALSE, keep.all = TRUE) %>% 
+                     mutate(species = "L. niger", type = "Up in QP"),
+                   GO.and.KEGG.enrichment(am.alt.splice$Gene, gene.universe.apis.splicing, ontology = "BP", pan = FALSE, keep.all = TRUE) %>% 
+                     mutate(species = "A. mellifera", type = "Splicing"),
+                   GO.and.KEGG.enrichment(alt.spliced.flavus, gene.universe.flavus, ontology = "BP", pan = FALSE, keep.all = TRUE) %>% 
+                     mutate(species = "L. flavus", type = "Splicing"),
+                   GO.and.KEGG.enrichment(alt.spliced.niger, gene.universe.niger.splicing, ontology = "BP", pan = FALSE, keep.all = TRUE) %>% 
+                     mutate(species = "L. niger", type = "Splicing"))
 
-## GO and KEGG enrichment for transcriptional modules
+# This line means that GO/KEGG categories which did not even appear in the list of enriched genes get a p value of 1 
+plot.data <- expand.grid(ID = unique(big.table$ID), 
+                         species = unique(big.table$species), 
+                         type = unique(big.table$type), stringsAsFactors = FALSE) %>% 
+  left_join(big.table %>% select(ID, type, species, Pvalue)) %>% 
+  mutate(Pvalue = as.numeric(as.character(replace(Pvalue, is.na(Pvalue), 1)))) 
+```
+
+### Summary figure of KEGG results
+Figure S6: A summary of the KEGG enrichment tests: KEGG terms with multiple red squares were significantly enriched in multiple tests. Each square shows one of three results, for one of three species, and the colour of the square indicates the p-value for that result (on a -log10 scale) - blue squares are not statistically significant, red squares are significant (and are also marked with asterisks), and white squares are close to the p = 0.05 threshold. The "Up in QP" rows show the results of enrichment tests for KEGG terms on the gene set that was significantly up-regulated in queen pheromone-treated workers. The "Up in control" row shows the same tests, on the gene set that was significantly up-regulated in control workers. The "Splicing" row shows the results of the same tests, on the gene set that showed a significant change in alterative splicing between the two treatments.
+```{r fig.width = 11, fig.height = 12}
+kegg.plot.data <- plot.data %>% filter(grepl("KEGG", ID))
+kegg.plot.data <- kegg.plot.data[kegg.plot.data$ID %in% (kegg.plot.data %>% 
+                                            group_by(ID) %>% 
+                                            summarise(min.p = min(Pvalue)) %>% 
+                                            filter(min.p < 0.05) %>% .$ID), ] %>% 
+  left_join(big.table %>% select(ID, Term), by = "ID") %>% distinct() %>% mutate(sig = " ", sig = replace(sig, Pvalue<0.05, "*"))
+
+kegg.plot.data %>% ggplot(aes(x = species, y = type, fill = -log10(Pvalue+0.000000001))) + 
+  geom_tile(colour="black") +
+  geom_text(aes(label=sig)) +
+  facet_wrap(~Term, labeller = labeller(Term = label_wrap_gen(30))) + 
+  scale_fill_gradient2(name = "-log10(p)", low = "steelblue", mid = "white", high = "tomato", midpoint = -log10(0.05)) + 
+  theme_bw() + scale_x_discrete(expand=c(0,0)) + scale_y_discrete(expand=c(0,0)) + 
+  theme(panel.grid = element_blank(), 
+        strip.background = element_rect(fill = "white"), 
+        axis.text.x = element_text(face = "italic"),
+        legend.position = c(12/14, 1/12), legend.direction = "horizontal") + 
+  xlab(NULL) + ylab(NULL)
+```
+
+### Summary figure of GO results
+Figure S7: A summary of the GO enrichment tests: GO terms with multiple red squares were significantly enriched in multiple tests. For brevity, the figure only shows GO terms for which two or more enrichment tests returned a significant result. The figure shows the same information as Figure S6.
+```{r fig.width = 11, fig.height = 12}
+go.plot.data <- plot.data %>% filter(grepl("GO", ID))
+go.plot.data <- go.plot.data[go.plot.data$ID %in% (go.plot.data %>% 
+                                                     group_by(ID) %>% 
+                                                     summarise(n.sig = sum(Pvalue<0.05)) %>% 
+                                                     filter(n.sig >1) %>% .$ID), ] %>% 
+  left_join(big.table %>% select(ID, Term), by = "ID") %>% distinct() %>% 
+  mutate(sig = " ", sig = replace(sig, Pvalue<0.05, "*"))
+go.plot.data$Term <- with(go.plot.data, paste(toupper(substr(Term, 1, 1)), substr(Term, 2, nchar(Term)), sep=""))
+
+go.plot.data %>% ggplot(aes(x = species, y = type, fill = -log10(Pvalue+0.000000001))) + 
+  geom_tile(colour="black") +
+  geom_text(aes(label=sig)) +
+  facet_wrap(~Term, labeller = labeller(Term = label_wrap_gen(20))) + 
+  scale_fill_gradient2(name = "-log10(p)", low = "steelblue", mid = "white", high = "tomato", midpoint = -log10(0.05)) + 
+  theme_bw() + scale_x_discrete(expand=c(0,0)) + scale_y_discrete(expand=c(0,0)) + 
+  theme(panel.grid = element_blank(), 
+        strip.background = element_rect(fill = "white"), 
+        axis.text.x = element_text(face = "italic"),
+        legend.position = c(12/14, 1/12), legend.direction = "horizontal") + 
+  xlab(NULL) + ylab(NULL)
+```
+
+
+
+
+## KEGG and GO enrichment for transcriptional modules
 ```{r echo=FALSE}
 # For the module GO tests, the gene universe is genes that are present in the network
 gene.universe.modules <- OGGs[[2]]$am 
 ```
 
 
-### Enriched GO and KEGG terms in module 1
-*Table S21*: Results of GO and KEGG enrichment analysis for the genes in Module 1. The gene universe was defined as all genes for which we found an ortholog in all four species.
+### Enriched KEGG and GO terms in module 1
+*Table S21*: Results of KEGG and GO enrichment analysis for the genes in Module 1. The gene universe was defined as all genes for which we found an ortholog in all four species.
  <br/><br/> 
 <input type=button class=hideshow></input>
 ```{r}
 GO.and.KEGG.enrichment(genes.in.module(1), gene.universe.modules, ontology = "BP")
 ```
 
-### Enriched GO and KEGG terms in module 2
-*Table S22*: Results of GO and KEGG enrichment analysis for the genes in Module 2. The gene universe was defined as all genes for which we found an ortholog in all four species.
+### Enriched KEGG and GO terms in module 2
+*Table S22*: Results of KEGG and GO enrichment analysis for the genes in Module 2. The gene universe was defined as all genes for which we found an ortholog in all four species.
  <br/><br/> 
 <input type=button class=hideshow></input>
 ```{r}
 GO.and.KEGG.enrichment(genes.in.module(2), gene.universe.modules, ontology = "BP")
 ```
 
-### Enriched GO and KEGG terms in module 3
-*Table S23*: Results of GO and KEGG enrichment analysis for the genes in Module 3. The gene universe was defined as all genes for which we found an ortholog in all four species.
+### Enriched KEGG and GO terms in module 3
+*Table S23*: Results of KEGG and GO enrichment analysis for the genes in Module 3. The gene universe was defined as all genes for which we found an ortholog in all four species.
  <br/><br/> 
 <input type=button class=hideshow></input>
 ```{r}
 GO.and.KEGG.enrichment(genes.in.module(3), gene.universe.modules, ontology = "BP") 
 ```
 
-### Enriched GO and KEGG terms in module 4
-*Table S24*: Results of GO and KEGG enrichment analysis for the genes in Module 4. The gene universe was defined as all genes for which we found an ortholog in all four species.
+### Enriched KEGG and GO terms in module 4
+*Table S24*: Results of KEGG and GO enrichment analysis for the genes in Module 4. The gene universe was defined as all genes for which we found an ortholog in all four species.
  <br/><br/> 
 <input type=button class=hideshow></input>
 ```{r}
 GO.and.KEGG.enrichment(genes.in.module(4), gene.universe.modules, ontology = "BP") 
 ```
 
-### Enriched GO and KEGG terms in module 5
-*Table S25*: Results of GO and KEGG enrichment analysis for the genes in Module 5. The gene universe was defined as all genes for which we found an ortholog in all four species.
+### Enriched KEGG and GO terms in module 5
+*Table S25*: Results of KEGG and GO enrichment analysis for the genes in Module 5. The gene universe was defined as all genes for which we found an ortholog in all four species.
  <br/><br/> 
 <input type=button class=hideshow></input>
 ```{r}
@@ -1025,7 +1094,7 @@ melt(inspect.module.genes(5)[,c(2,4:7)]) %>%
   scale_y_discrete(expand=c(0,0)) + theme_bw() + theme(panel.grid = element_blank(), axis.text.x = element_text(face = "italic"))
 ```
  <br/><br/> 
- *Figure S7*: Change in expression for all the genes in Module 5, in each species (i.e. the same data as in Table S23). The genes are ranked from most (top) to least (bottom) connected, using within-module connectedness. Genes in this module were mostly upregulated in _A. mellifera_ and downregulated in the other species (the colour shows log fold-change in expression in response to queen pheromone). 
+ *Figure S8*: Change in expression for all the genes in Module 5, in each species (i.e. the same data as in Table S23). The genes are ranked from most (top) to least (bottom) connected, using within-module connectedness. Genes in this module were mostly upregulated in _A. mellifera_ and downregulated in the other species (the colour shows log fold-change in expression in response to queen pheromone). 
 
 
 
