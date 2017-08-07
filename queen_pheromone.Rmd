@@ -17,6 +17,7 @@ This document was prepared in R Markdown, then translated into html using the R 
 
 ### Load R libraries (install first from CRAN or Bioconductor)
 ```{r message=FALSE, warning=FALSE, results="hide"}
+library(GOstats) # GO term hypergeometric tests - load early so it doesn't clash with dplyr::select etc
 library(WGCNA) # Gene networks - needs 'impute' dependency: source("https://bioconductor.org/biocLite.R"); biocLite("impute")
 library(RSQLite) # Access SQLite databases
 library(reshape2) # data tidying (melt)
@@ -66,8 +67,8 @@ make.OGGs <- function(species, bad.samples = NULL, log.data = T){
     # third column has species 2 gene in reverse mapping (this can be NA, or different to col 2)
     # we want the rows where cols 2 and 3 are the same, indicating reciprocity in the BLAST
     focal <- left_join(
-      tbl(my_db, forward.mappings[i]) %>% select(-evalue), # get the two mappings and 
-      tbl(my_db, backward.mappings[i]) %>% select(-evalue), # merge by species 1 column
+      tbl(my_db, forward.mappings[i]) %>% dplyr::select(-evalue), # get the two mappings and 
+      tbl(my_db, backward.mappings[i]) %>% dplyr::select(-evalue), # merge by species 1 column
       by = species[1]
     ) %>% 
       collect(n=Inf) %>% as.data.frame  # collect it all and convert to df
@@ -368,7 +369,7 @@ get.fc.for.pair.species <- function(species1, species2){
 
 
 #### Make a table and a plot of the correlations for each pair of species
-*Table S8*: Results of Spearman's rank correlations, testing whether the fold-change in gene expression in response to queen pheromone is correlated for a given pair of species. Positive coefficients (rho) indicate that on average, orthologous genes are affected in the same direction by queen pheromones.
+*Table S8*: Results of Spearman's rank correlations, testing whether the fold-change in gene expression in response to queen pheromone is correlated for a given pair of species. Positive coefficients (rho) indicate that on average, orthologous genes are affected in the same direction by queen pheromones. The p-values have been corrected for multiple testing with the Benjamini-Hochberg method.
 ```{r TableS1}
 species.combinations <- t(combn(c("am", "bt", "lf", "ln"), 2))
 rho <- numeric(nrow(species.combinations))
@@ -384,7 +385,7 @@ for(i in 1:nrow(species.combinations)){
 species.combinations <- data.frame(Species1 = species.combinations[,1],
                                    Species2  = species.combinations[,2],
                                    rho = rho,
-                                   p = p,
+                                   p = p.adjust(p, method = "BH"), # adjust these p-vals for multiple testing
                                    sig = " ", stringsAsFactors = F)
 
 species.combinations[species.combinations == "am"] <- "Apis mellifera"
@@ -404,7 +405,7 @@ species.combinations %>% mutate(rho = format(round(rho, 3), nsmall = 3)) %>% pan
 heat.map.figure <- species.combinations %>% ggplot(aes(Species1, Species2, fill=rho)) + 
   geom_tile(colour="white", size=4) + 
   scale_fill_gradient2(name = "Corr", low = brewer.pal(9, "RdYlBu")[7], mid = "white", high = brewer.pal(9, "RdYlBu")[2]) + 
-  geom_text(aes(label = sig), size = 3.5) +
+  geom_text(aes(label = paste(format(signif(rho, 2), nsmall = 2), sig)), size = 3.5) +
   theme_bw() + theme(panel.grid = element_blank(), panel.border = element_blank(), axis.ticks = element_blank(), axis.text = element_text(face = "italic"), legend.position = "none") + 
   xlab(NULL) + ylab(NULL) +
   scale_x_discrete(labels = c("Apis\nmellifera", "Bombus\nterrestris", "Lasius\nflavus"), expand = c(0,0)) + 
@@ -413,7 +414,7 @@ heat.map.figure
 ggsave(heat.map.figure, file = "figures/Correlations heat map.pdf", height = 4, width=4.3)
 ```
  <br/><br/> 
- *Figure S3*: Results of Spearman's rank correlations, testing whether the fold-change in gene expression in response to queen pheromone is correlated for a given pair of species. The colour shows the correlation (Spearman's rho), where red  indicates that on average, orthologous genes are affected in the same direction by queen pheromones, and blue indicates the reverse. The stars show the degree of statistical significance (\*: p < 0.05, \*\* p < 0.01, \*\*\* p < 0.0001).
+ *Figure S3*: Results of Spearman's rank correlations, testing whether the fold-change in gene expression in response to queen pheromone is correlated for a given pair of species. The colour shows the correlation (Spearman's rho), where red  indicates that on average, orthologous genes are affected in the same direction by queen pheromones, and blue indicates the reverse. The stars show the degree of statistical significance after FDR correction (\*\* p < 0.01, \*\*\* p < 0.0001).
 
 ## Identifying genes that splice differently following queen pheromone treatment
 
@@ -545,12 +546,11 @@ remove.effects.combat <- function(expression.data){
 # Build a gene coexpresison network using WGCNA package
 build.network <- function(expression.data.list){
   # Pick the soft thresholding power that gives a model fit of R^2 > 0.8 for the scale-free topology model
-  # Assigning the output to 'shh' prevents the function printing so much to the console
   soft.power <- pickSoftThreshold(expression.data.list[[1]], RsquaredCut = 0.8, verbose = 0, powerVector = 1:30)
   # Use this power to generate a gene co-expression network, using the default settings
   network <- blockwiseModules(expression.data.list[[1]], 
                               power = soft.power$powerEstimate,
-                              networkType = "unsigned",
+                              networkType = "signed",
                               minModuleSize = 30,
                               verbose = 0,
                               saveTOMs = T)
@@ -626,14 +626,14 @@ Here is the number of orthologous genes that form the network:
 length(network[[1]]$colors)
 ```
 
-Here is the number and size of modules in the network - module 0 is the unassigned genes
+Here is the number and size of modules in the network - module 0 refers to the unassigned genes.
 ```{r}
-table(network[[1]]$colors) 
+table(network[[1]]$colors) %>% pander
 ```
 
 
 ### Make a plot of the module eigengenes
-```{r}
+```{r fig.width = 9, fig.height = 8}
 # Make a plot of the module eigengenes, split by species, module and treatment
 treatments.network.plot <- function(dat){ 
   dat %>% mutate(Treatment = replace(as.character(Treatment), Treatment == "QP", "Queen\npheromone")) %>%
@@ -642,14 +642,14 @@ treatments.network.plot <- function(dat){
     geom_boxplot() + 
     facet_wrap(~Module) + 
     xlab(NULL) + 
-    scale_x_discrete(labels = c("Apis\nmellifera", "Bombus\nterrestris", "Lasius\nflavus", "Lasius\nniger")) + 
+    scale_x_discrete(labels = c("Apis\nmellifera", "Bombus\nterrestris", "Lasius\nflavus", "Lasius\nniger")) +
+    scale_fill_brewer(name = " ", palette = "Set3", direction = -1) + 
     theme_bw() + 
-    theme(legend.position=c(0.833,0.25),  strip.background = element_blank(), axis.text.x = element_text(face = "italic"), panel.border = element_rect(size=0.7)) +
-    scale_fill_discrete(name = " ")
+    theme(strip.background = element_blank(), axis.text.x = element_text(face = "italic"), panel.border = element_rect(size=0.7), legend.position = "top") 
 }
 
 eigen.data %>% treatments.network.plot
-ggsave(eigen.data %>% treatments.network.plot, file = "figures/Module eigengenes.pdf", height = 5.7, width = 8)
+ggsave(eigen.data %>% treatments.network.plot, file = "figures/Module eigengenes.pdf", height = 6.6, width = 8)
 ```
  <br/><br/> 
  *Figure S4*: The figure shows the distribution of module eigengenes for each combination of module, species, and queen pheromone (QP) treatment. Positive values mean that the focal group has higher eigengenes, which derived from the relative expression levels of a module of genes, than the average. Queen pheromone treatment had a statistically significant effect on eigengenes for module 5. 
@@ -728,7 +728,7 @@ First, define some functions we will need. See also the R script "Script to set 
 There are only two differentially expressed genes for _B. terrestris_, so it is only meaningful to test for enriched GO/KEGG terms in the other three species.
 ```{r module.funs, warnings = FALSE}
 GO.and.KEGG.enrichment <- function(enriched.genes, gene.universe, ontology, pan = TRUE, keep.all = FALSE){
-  library(GOstats) # GO term hypergeometric tests - load inside the function so it doesn't clash with dplyr::select etc
+
   p <- 0.05
   if(keep.all) p <- 1
   GO.enrichment <- function(enriched.genes, gene.universe, ontology){
@@ -740,10 +740,10 @@ GO.and.KEGG.enrichment <- function(enriched.genes, gene.universe, ontology, pan 
                                  pvalueCutoff = p,
                                  conditional = TRUE, # Do the test conditional on the GO structure
                                  testDirection = "over") # Look for over-represented GO terms, not under
-    summary(hyperGTest(params)) %>% mutate(Pvalue = format(round(Pvalue, 5), nsmall = 3),
+    summary(hyperGTest(params)) %>% dplyr::mutate(Pvalue = format(round(Pvalue, 5), nsmall = 3),
                                            OddsRatio = format(round(OddsRatio, 3), nsmall = 3),
                                            ExpCount = format(round(ExpCount, 3), nsmall = 3)) %>%
-      rename(ID = GOBPID)
+      dplyr::rename(ID = GOBPID)
   }
   
   kegg.enrichment <- function(enriched.genes, gene.universe){
@@ -753,11 +753,11 @@ GO.and.KEGG.enrichment <- function(enriched.genes, gene.universe, ontology, pan 
                                    universeGeneIds = gene.universe,
                                    pvalueCutoff = p,
                                    testDirection = "over") # Look for over-represented KEGG terms, not under
-    summary(hyperGTest(params)) %>% mutate(Pvalue = format(round(Pvalue, 5), nsmall = 3),
+    summary(hyperGTest(params)) %>% dplyr::mutate(Pvalue = format(round(Pvalue, 5), nsmall = 3),
                                            OddsRatio = format(round(OddsRatio, 3), nsmall = 3),
                                            ExpCount = format(round(ExpCount, 3), nsmall = 3),
                                            KEGGID = paste("KEGG", KEGGID, sep = ":")) %>%
-      rename(ID = KEGGID)
+      dplyr::rename(ID = KEGGID)
   }
   
   output <- rbind(kegg.enrichment(enriched.genes, gene.universe), GO.enrichment(enriched.genes, gene.universe, ontology)) 
@@ -980,7 +980,7 @@ big.table <- rbind(suppressMessages(GO.and.KEGG.enrichment(up.in.control.apis, g
 plot.data <- expand.grid(ID = unique(big.table$ID), 
                          species = unique(big.table$species), 
                          type = unique(big.table$type), stringsAsFactors = FALSE) %>% 
-  left_join(big.table %>% select(ID, type, species, Pvalue), by = c("ID", "species", "type")) %>% 
+  left_join(big.table %>% dplyr::select(ID, type, species, Pvalue), by = c("ID", "species", "type")) %>% 
   mutate(Pvalue = as.numeric(as.character(replace(Pvalue, is.na(Pvalue), 1)))) 
 ```
 
@@ -994,7 +994,7 @@ kegg.plot.data <- kegg.plot.data[kegg.plot.data$ID %in% (kegg.plot.data %>%
                                             filter(min.p < 0.05) %>% .$ID), ] %>% 
   left_join(big.table %>% select(ID, Term), by = "ID") %>% distinct() %>% mutate(sig = " ", sig = replace(sig, Pvalue<0.05, "*"))
 
-kegg.plot.data %>% ggplot(aes(x = species, y = type, fill = -log10(Pvalue+0.000000001))) + 
+kegg.plot <- kegg.plot.data %>% ggplot(aes(x = species, y = type, fill = -log10(Pvalue+0.000000001))) + 
   geom_tile(colour="black") +
   geom_text(aes(label=sig)) +
   facet_wrap(~Term, labeller = labeller(Term = label_wrap_gen(30))) + 
@@ -1005,6 +1005,7 @@ kegg.plot.data %>% ggplot(aes(x = species, y = type, fill = -log10(Pvalue+0.0000
         axis.text.x = element_text(face = "italic"),
         legend.position = c(12/14, 1/12), legend.direction = "horizontal") + 
   xlab(NULL) + ylab(NULL)
+ggsave(kegg.plot, file = "figures/KEGG summary fig.pdf", height = 8, width = 12)
 ```
 
 ### Summary figure of GO results
@@ -1019,10 +1020,17 @@ go.plot.data <- go.plot.data[go.plot.data$ID %in% (go.plot.data %>%
   mutate(sig = " ", sig = replace(sig, Pvalue<0.05, "*"))
 go.plot.data$Term <- with(go.plot.data, paste(toupper(substr(Term, 1, 1)), substr(Term, 2, nchar(Term)), sep=""))
 
-go.plot.data %>% ggplot(aes(x = species, y = type, fill = -log10(Pvalue+0.000000001))) + 
+go.plot <- go.plot.data %>% 
+  filter(Term != "Purine nucleoside monophosphate metabolic process", # omit these 'child' GO terms for brevity
+         Term != "Purine nucleoside diphosphate metabolic process",
+         Term != "Purine nucleoside triphosphate metabolic process",
+         Term != "Ribonucleoside monophosphate metabolic process",
+         Term != "Ribonucleoside diphosphate metabolic process",
+         Term != "Ribonucleoside triphosphate metabolic process") %>%
+  ggplot(aes(x = species, y = type, fill = -log10(Pvalue+0.000000001))) + 
   geom_tile(colour="black") +
   geom_text(aes(label=sig)) +
-  facet_wrap(~Term, labeller = labeller(Term = label_wrap_gen(20))) + 
+  facet_wrap(~Term, labeller = labeller(Term = label_wrap_gen(25))) + 
   scale_fill_gradient2(name = "-log10(p)", low = "steelblue", mid = "white", high = "tomato", midpoint = -log10(0.05)) + 
   theme_bw() + scale_x_discrete(expand=c(0,0)) + scale_y_discrete(expand=c(0,0)) + 
   theme(panel.grid = element_blank(), 
@@ -1030,6 +1038,8 @@ go.plot.data %>% ggplot(aes(x = species, y = type, fill = -log10(Pvalue+0.000000
         axis.text.x = element_text(face = "italic"),
         legend.position = c(12/14, 1/12), legend.direction = "horizontal") + 
   xlab(NULL) + ylab(NULL)
+ggsave(go.plot, file = "figures/GO summary fig.pdf", height = 10, width = 13)
+
 ```
 
 
@@ -1082,27 +1092,69 @@ GO.and.KEGG.enrichment(genes.in.module(4), gene.universe.modules, ontology = "BP
 GO.and.KEGG.enrichment(genes.in.module(5), gene.universe.modules, ontology = "BP")
 ```
 
+### Enriched KEGG and GO terms in module 6
+*Table S29*: Results of KEGG and GO enrichment analysis for the genes in Module 6. The gene universe was defined as all genes for which we found an ortholog in all four species.
+ <br/><br/> 
+<input type=button class=hideshow></input>
+```{r}
+GO.and.KEGG.enrichment(genes.in.module(6), gene.universe.modules, ontology = "BP")
+```
 
-## Inspect the gene list for the pheromone-sensitive module 5
-*Table S29*: List of all the genes in Module 5, ranked by their within-module connectivity, *k*. The latter four columns give the Log2 fold-change in expression in response to queen pheromone in each of the four species.
+### Enriched KEGG and GO terms in module 7
+*Table S30*: Results of KEGG and GO enrichment analysis for the genes in Module 7. The gene universe was defined as all genes for which we found an ortholog in all four species.
+ <br/><br/> 
+<input type=button class=hideshow></input>
+```{r}
+GO.and.KEGG.enrichment(genes.in.module(7), gene.universe.modules, ontology = "BP")
+```
+
+### Enriched KEGG and GO terms in module 8
+*Table S31*: Results of KEGG and GO enrichment analysis for the genes in Module 8. The gene universe was defined as all genes for which we found an ortholog in all four species.
+ <br/><br/> 
+<input type=button class=hideshow></input>
+```{r}
+GO.and.KEGG.enrichment(genes.in.module(8), gene.universe.modules, ontology = "BP")
+```
+
+### Enriched KEGG and GO terms in module 9
+*Table S32*: Results of KEGG and GO enrichment analysis for the genes in Module 9. The gene universe was defined as all genes for which we found an ortholog in all four species.
+ <br/><br/> 
+<input type=button class=hideshow></input>
+```{r}
+GO.and.KEGG.enrichment(genes.in.module(9), gene.universe.modules, ontology = "BP")
+```
+
+## Inspect the gene list for the pheromone-sensitive module 4
+*Table S33*: List of all the genes in Module 4, ranked by their within-module connectivity, *k*. The latter four columns give the Log2 fold-change in expression in response to queen pheromone in each of the four species.
  <br/><br/> 
 <input type=button class=hideshow></input>
 ```{r warning=FALSE, message=FALSE}
-inspect.module.genes(5) %>% 
+inspect.module.genes(4) %>% 
   mutate(am_fc=log2(am_fc), bt_fc=log2(bt_fc), lf_fc=log2(lf_fc), ln_fc=log2(ln_fc)) %>% 
   rename(Gene=gene, Name=name) %>% 
   pander(split.cell = 40, split.table = Inf)
 ```
 
-### Plot the gene list for the pheromone-sensitive module 5
+## Inspect the gene list for the pheromone-sensitive module 9
+*Table S34*: List of all the genes in Module 9, ranked by their within-module connectivity, *k*. The latter four columns give the Log2 fold-change in expression in response to queen pheromone in each of the four species.
+ <br/><br/> 
+<input type=button class=hideshow></input>
 ```{r warning=FALSE, message=FALSE}
-melt(inspect.module.genes(5)[,c(2,4:7)]) %>% 
-  rename(Gene = name, Species = variable, FC = value) %>% 
-  mutate(FC=log2(FC), Gene = factor(Gene, levels = rev(unique(Gene)))) %>% 
-  ggplot(aes(Species, Gene, fill=FC)) + geom_tile(colour="black") + 
-  scale_fill_gradient2(name = "Log2(FC)", low = brewer.pal(9, "RdYlBu")[7], mid = "white", high = brewer.pal(9, "RdYlBu")[2]) +
-  scale_x_discrete(labels = c("Apis\nmellifera", "Bombus\nterrestris", "Lasius\nflavus", "Lasius\nniger"), expand=c(0,0)) +
-  scale_y_discrete(expand=c(0,0)) + theme_bw() + theme(panel.grid = element_blank(), axis.text.x = element_text(face = "italic"))
+inspect.module.genes(9) %>% 
+  mutate(am_fc=log2(am_fc), bt_fc=log2(bt_fc), lf_fc=log2(lf_fc), ln_fc=log2(ln_fc)) %>% 
+  rename(Gene=gene, Name=name) %>% 
+  pander(split.cell = 40, split.table = Inf)
+```
+
+### Plot the gene list for the pheromone-sensitive module 4
+```{r warning=FALSE, message=FALSE}
+# melt(inspect.module.genes(5)[,c(2,4:7)]) %>% 
+#   rename(Gene = name, Species = variable, FC = value) %>% 
+#   mutate(FC=log2(FC), Gene = factor(Gene, levels = rev(unique(Gene)))) %>% 
+#   ggplot(aes(Species, Gene, fill=FC)) + geom_tile(colour="black") + 
+#   scale_fill_gradient2(name = "Log2(FC)", low = brewer.pal(9, "RdYlBu")[7], mid = "white", high = brewer.pal(9, "RdYlBu")[2]) +
+#   scale_x_discrete(labels = c("Apis\nmellifera", "Bombus\nterrestris", "Lasius\nflavus", "Lasius\nniger"), expand=c(0,0)) +
+#   scale_y_discrete(expand=c(0,0)) + theme_bw() + theme(panel.grid = element_blank(), axis.text.x = element_text(face = "italic"))
 ```
  <br/><br/> 
  *Figure S8*: Change in expression for all the genes in Module 5, in each species (i.e. the same data as in Table S29). The genes are ranked from most (top) to least (bottom) connected, using within-module connectedness. Genes in this module were mostly upregulated in _A. mellifera_ and downregulated in the other species (the colour shows log fold-change in expression in response to queen pheromone). 
