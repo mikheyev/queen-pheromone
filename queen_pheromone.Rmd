@@ -1,18 +1,18 @@
 ---
 title: "Online Supplementary Material"
-author: "From the manuscript: Queen pheromones have conserved effects on gene expression in social insects separated by 150MY of evolution"
+author: "From the manuscript: Queen pheromones have conserved effects on gene expression in ants and bees"
 output:
   html_document:
-    toc: true # table of content true
+    toc: true 
     toc_float: true # make 
-    depth: 3  # upto three depths of headings (specified by #, ## and ###)
-    number_sections: false  ## if you want number sections at each table header
-    theme: yeti # lovely fonts and colours
-    code_folding: hide # awesome buttons to show/hide the code
+    depth: 3  
+    number_sections: false 
+    theme: yeti 
+    code_folding: hide #
   pdf_document: default
 ---
 
-This document was prepared in R Markdown, then translated into html using the R package `knitr`. Press the buttons labelled **Code** to show or hide the R code used to produce each table, plot or statistical result. For convenience, large tables can be minimised with the buttons labelled **Hide output**. 
+This document was prepared in R Markdown, then translated into html using the R package `knitr`. Press the buttons labelled **Code** to show or hide the R code used to produce each table, plot or statistical result. You can also select 'Show all code' in the top left corner.
 
 
 ### Load R libraries (install first from CRAN or Bioconductor)
@@ -35,12 +35,19 @@ library(ecodist) # for nmds
 library(MuMIn) # for model comparison
 library(sva) # for ComBat function; install via source("https://bioconductor.org/biocLite.R"); biocLite("sva")
 library(pander) # for nice tables
+library(kableExtra) # For scrollable tables
+
+kable.table <- function(df) {
+  kable(df, "html") %>%
+  kable_styling() %>%
+  scroll_box(height = "300px")
+}
 
 # Open database connections (Sasha uses SQL, Luke prefers dplyr)
-db <- dbConnect(SQLite(), dbname="data/queen pheromone.db")
-my_db <- src_sqlite("data/queen pheromone.db")
+db <- dbConnect(SQLite(), dbname="data/queen_pheromone.db")
+my_db <- src_sqlite("data/queen_pheromone.db")
 
-# These 4 samples should not be used (See below). They were also removed in all non-R analyses (e.g. differential gene expression analyses using EBseq)
+# These 4 samples should NOT be used (See below). They were also removed in all non-R analyses (e.g. differential gene expression analyses using EBseq)
 bad.samples <- c("lf1", "ln1", "ln12", "lf12")
 ```
 
@@ -181,7 +188,7 @@ data.frame(id = rownames(expression.data),
  **Figure S`r numbering("supp.figure.counter")`**: With the four problematic samples removed, the samples cluster according to species with no obvious outliers.
  
 ## Table of sample sizes
-**Table S1**: Number of sequencing libraries for each combination of species and treatment, after removing the four problematic libraries. Each library was prepared from a pool of workers, taken from the same colony. 
+**Table S`r numbering("supp.table.counter")`**: Number of sequencing libraries for each combination of species and treatment, after removing the four problematic libraries. Each library was prepared from a pool of workers, taken from the same colony. 
 ```{r sample.size.table}
 sample.size.table <- treatments[treatments$id %in% rownames(expression.data),] %>% 
   group_by(species, treatment) %>% 
@@ -242,35 +249,28 @@ names(niger.de) <- gsub("_", " ", names(niger.de))
 ```
 
 ### DE genes for _Apis mellifera_
-**Table S`r numbering("supp.table.counter")`**: List of significantly differentially expressed genes (EBseq; p < 10^-5^) in _Apis mellifera_, listed in order of fold change in gene expression on a Log$_2$ scale. Positive fold change values indicate higher expression in the control, while negative values indicate higher expression in the queen pheromone treatment.
- <br/><br/> 
-<input type=button class=hideshow></input>
+**Table S`r numbering("supp.table.counter")`**: List of the `r nrow(apis.de)` significantly differentially expressed genes (EBseq; p < 10^-5^) in _Apis mellifera_, listed in order of fold change in gene expression on a Log$_2$ scale. Positive fold change values indicate higher expression in the control, while negative values indicate higher expression in the queen pheromone treatment.
 ```{r apis.de}
-apis.de %>% pander(split.cell = 40, split.table = Inf)
+kable.table(apis.de)
 ```
 
 ### DE genes for _Bombus terrestris_
-**Table S`r numbering("supp.table.counter")`**: List of significantly differentially expressed genes (EBseq; p < 10^-5^) in _Bombus terrestris_, listed in order of fold change in gene expression on a Log$_2$ scale. Positive fold change values indicate higher expression in the control, while negative values indicate higher expression in the queen pheromone treatment.
- <br/><br/> 
-<input type=button class=hideshow></input>
+**Table S`r numbering("supp.table.counter")`**: The single differentially expressed gene (EBseq; p < 10^-5^) in _Bombus terrestris_. Positive fold change values indicate higher expression in the control, while negative values indicate higher expression in the queen pheromone treatment. The second and third columns give the best BLAST hit for this gene in _A. mellifera_ plus the name of the _A. mellifera_ putative ortholog. 
 ```{r}
-bombus.de %>% pander(split.cell = 40, split.table = Inf)
+kable(bombus.de, "html") %>%
+  kable_styling()
 ```
 
 ### DE genes for _Lasius flavus_
-**Table S`r numbering("supp.table.counter")`**: List of significantly differentially expressed genes (EBseq; p < 10^-5^) in _Lasius flavus_, listed in order of fold change in gene expression on a Log$_2$ scale. Positive fold change values indicate higher expression in the control, while negative values indicate higher expression in the queen pheromone treatment.
- <br/><br/> 
-<input type=button class=hideshow></input>
+**Table S`r numbering("supp.table.counter")`**: List of the `r nrow(flavus.de)` significantly differentially expressed genes (EBseq; p < 10^-5^) in _Lasius flavus_, listed in order of fold change in gene expression on a Log$_2$ scale. Positive fold change values indicate higher expression in the control, while negative values indicate higher expression in the queen pheromone treatment. The second and third columns give the best BLAST hit for this gene in _A. mellifera_ plus the name of the _A. mellifera_ putative ortholog. 
 ```{r}
-flavus.de %>% pander(split.cell = 40, split.table = Inf)
+kable.table(flavus.de)
 ```
 
 ### DE genes for _Lasius niger_
-**Table S`r numbering("supp.table.counter")`**: List of significantly differentially expressed genes (EBseq; p < 10^-5^) in _Lasius niger_, listed in order of fold change in gene expression on a Log$_2$ scale. Positive fold change values indicate higher expression in the control, while negative values indicate higher expression in the queen pheromone treatment.
- <br/><br/> 
-<input type=button class=hideshow></input>
+**Table S`r numbering("supp.table.counter")`**: List of the `r nrow(niger.de)` significantly differentially expressed genes (EBseq; p < 10^-5^) in _Lasius niger_, listed in order of fold change in gene expression on a Log$_2$ scale. Positive fold change values indicate higher expression in the control, while negative values indicate higher expression in the queen pheromone treatment. The second and third columns give the best BLAST hit for this gene in _A. mellifera_ plus the name of the _A. mellifera_ putative ortholog. 
 ```{r}
-niger.de %>% pander(split.cell = 40, split.table = Inf)
+kable.table(niger.de)
 ```
 
 
@@ -414,12 +414,11 @@ all.overlaps <- c(af.oggs$am, an.oggs$am, fn.oggs$am[!is.na(fn.oggs$am)]) %>% un
 ```
 
 **Table S`r numbering("supp.table.counter")`**: All orthologous genes that were significantly differentially expressed between pheromone treatments in more than one species. The FC columns give the Log$_2$ fold-change in expression for each species where the focal gene was significantly differentially expressed, where positive numbers mean it was expressed at a higher level in control animals. The last column highlights genes that responded to treatment in a consistent or inconsistent direction across species. _B. terrestris_ is omitted because neither of its differentially expressed genes were significantly affected by treatment in the other three species.
- <br/><br/> 
-<input type=button class=hideshow></input>
 ```{r overlap.table}
-pander(overlaps, split.cell = 40, split.table = Inf)
+kable.table(overlaps)
 ```
 
+<br></br>
 **Table S`r numbering("supp.table.counter")`**: The overlap between the lists of significantly differently expressed orthologous genes was significantly higher than expected for _L. flavus_ and _L. niger_, suggesting that queen pheromone has conserved effects on gene expression between these two species (results based on a hypergeometric test). For the other two species pairs, the number of overlapping genes was not higher or lower than expected under the null hypothesis that queen pheromone affects a random set of genes in each species.
 ```{r overlap.table.p}
 pander(overlap.p.values, split.cell = 40, split.table = Inf)
@@ -494,15 +493,14 @@ most.pheromone.sensitive.genes <- function(){
   names(dat) <- c("Name", "Appears in", "Size of gene set")
   dat
 }
-most.pheromone.sensitive.genes <- most.pheromone.sensitive.genes() %>% 
-    pander(split.cell = 40, split.table = Inf)
+most.pheromone.sensitive.genes <- most.pheromone.sensitive.genes()
 ```
 
 **Table S`r numbering("supp.table.counter")`**: List of genes that appear in the top _n_-most pheromone-sensitive genes for 3 or 4 species. To generate the table, we ranked genes by the absolute value of their log fold change in response to queen pheromone, then listed the gene names that appeared in 3-4 species. For non-_Apis_ species, we found the gene names by comparison with the _Apis_ genome by BLAST. This exercise was performed with _n_ = 100, 200 ... 500, and the third column lists the smallest _n_ for which the gene in question appeared (for example, the gene _protein takeout-like_ appeared for all 4 species when inspecting the top 200+ genes). 
- <br/><br/> 
-<input type=button class=hideshow></input>
 ```{r}
-most.pheromone.sensitive.genes
+kable(most.pheromone.sensitive.genes, "html") %>%
+  kable_styling() %>%
+  scroll_box(height = "300px")
 ```
 
 
@@ -653,7 +651,7 @@ rbind(my_db %>% tbl("isoforms_am") %>% collect %>% .$gene %>%
       my_db %>% tbl("isoforms_ln") %>% collect %>% .$gene %>% 
         table %>% melt %>% select(value) %>% mutate(sp = "Lasius flavus")) %>% 
   as.data.frame() %>%
-  ggplot(aes(x=value, y = sp, fill = sp)) + 
+  ggplot(aes(x = value, y = sp, fill = sp)) + 
   geom_joy(stat = "binline", binwidth=1) + 
   coord_cartesian(xlim=c(1,12)) + 
   scale_fill_cyclical(values = c("#4040B0", "#9090F0")) + 
@@ -727,29 +725,23 @@ JOIN
 
 ### Genes showing pheromone-induced alternative splicing in _A. mellifera_
 **Table S`r numbering("supp.table.counter")`**: List of genes showing statistically significant pheromone-induced alternative splicing in _A. mellifera_. These genes were defined as those that have at least two isoforms that are differentially expressed following pheromone treatment with p < 10^-5^, and for which one isoform increases in expression while another decreases. The last two columns show the fold changes of the most down-regulated and most up-regulated isoforms, on a Log$_2$ scale.
- <br/><br/> 
-<input type=button class=hideshow></input>
 ```{r am.splice}
 am.alt.splice <- find.alternatively.spliced.genes("am")
-pander(am.alt.splice, split.cell = 40, split.table = Inf)
+kable.table(am.alt.splice)
 ```
 
 ### Genes showing pheromone-induced alternative splicing in _L. flavus_
 **Table S`r numbering("supp.table.counter")`**: List of genes showing statistically significant pheromone-induced alternative splicing in _L. flavus_. The table shows the same information as Table S10.
- <br/><br/> 
-<input type=button class=hideshow></input>
 ```{r lf.splice}
 lf.alt.splice<- find.alternatively.spliced.genes("lf")
-pander(lf.alt.splice, split.cell = 40, split.table = Inf)
+kable.table(lf.alt.splice)
 ```
 
 ### Genes showing pheromone-induced alternative splicing in _L. niger_
 **Table S`r numbering("supp.table.counter")`**: List of genes showing statistically significant pheromone-induced alternative splicing in _L. niger_. The table shows the same information as Table S10.
- <br/><br/> 
-<input type=button class=hideshow></input>
 ```{r ln.splice}
 ln.alt.splice <- find.alternatively.spliced.genes("ln")
-pander(ln.alt.splice, split.cell = 40, split.table = Inf)
+kable.table(ln.alt.splice)
 ```
 
 ### There are no genes showing pheromone-sensitive splicing for _B. terrestris_
@@ -929,10 +921,8 @@ ggsave(eigen.data %>% treatments.network.plot(),
 ### Run model selection analysis to test for treatment and species effects on eigengenes
 
 **Table S13**: Model selection analysis, using AICc (corrected Akaike Information Criterion) to rank all possible models of the module eigengene data shown in Figure S5. The models are listed from best to worst for each module. The 'delta' column gives the difference in AICc scores between the focal model and the top model in the set, where delta > 2 is considered to be a significant improvement in model fit. The column 'weight' gives Akaike weights, which can be interpreted as probabilities that the focal model is the top model in the set, given the data.
- <br/><br/> 
-<input type=button class=hideshow></input>
 ```{r}
-run.stats(eigen.data) %>% pander()
+run.stats(eigen.data) %>% kable.table()
 ```
 
 ### Plot the correlations between all modules and the pheromone treatment
@@ -1018,9 +1008,10 @@ Lastly, 'expression level' refers to the average expression of each gene, expres
 
 ```{r fig.height=8, fig.width=8}
 # import and clean up the data provided by Brendan Hunt
-hunt.data <- read.delim("data/Amel_AllData_012709.txt", header=T, stringsAsFactors = FALSE)  %>% 
+hunt.data <- read.delim("data/apis_gene_comparisons/Amel_AllData_012709.txt", 
+                        header=T, stringsAsFactors = FALSE) %>% 
   mutate(log2RW.SW = log2(RW_bagel / SW_bagel))        # calculate log fold difference in gene expression between fertile and sterile workers
-entrez.tbl <- read.delim("./data/am.gene_info.txt", stringsAsFactors = FALSE)[,c(2,5,6)] # import table of gene names (Entrez, old Beebase, and new Beebase)
+entrez.tbl <- read.delim("data/apis_gene_comparisons/am.gene_info.txt", stringsAsFactors = FALSE)[,c(2,5,6)] # import table of gene names (Entrez, old Beebase, and new Beebase)
 names(entrez.tbl) <- c("entrez.id", "beebase1", "beebase2")
 hunt.data <- hunt.data %>% 
   dplyr::select(ID, log2Q.SW, log2RW.SW, CAI, cpgOE) %>% # get gene ID and the relevant data
@@ -1035,14 +1026,14 @@ hunt.data <- left_join(tbl(my_db, "ebseq_gene_am") %>%       # merge Hunt's data
   left_join(tbl(my_db, "bee_names") %>% collect, by = "gene")  # also add the gene names 
 
 # Import methylation data provided by Soojin Yi and Xin Wu (from Galbraith et al PNAS)
-methylation <- read.csv("data/apis_gene_methyl_CG_OE.csv", stringsAsFactors = FALSE)
+methylation <- read.csv("data/apis_gene_comparisons/apis_gene_methyl_CG_OE.csv", stringsAsFactors = FALSE)
 methylation <- tbl(my_db, "ebseq_gene_am") %>% collect %>% left_join(methylation, by = "gene") %>%
   filter(!is.na(Gene_body_methylation)) %>%
   left_join(tbl(my_db, "bee_names") %>% collect(), by = "gene") %>% distinct(gene, .keep_all = T)
 
 # Import gamma data from Harpur et al PNAS
 gamma_am <- tbl(my_db, "ebseq_gene_am") %>% collect() %>%
-  left_join(read.table("data/harpur_etal_gamma.txt", header=TRUE, stringsAsFactors=FALSE) %>% rename(gene = Gene), by = "gene") %>%
+  left_join(read.table("data/apis_gene_comparisons/harpur_etal_gamma.txt", header=TRUE, stringsAsFactors=FALSE) %>% rename(gene = Gene), by = "gene") %>%
   filter(!is.na(gamma)) %>%
   dplyr::select(gene, PostFC, gamma) %>%
   mutate(PostFC = log2(PostFC)) %>% left_join(tbl(my_db, "bee_names"), copy=TRUE, by = "gene") %>%
@@ -1124,9 +1115,9 @@ Of all the possible module pairs, we found 6 pairs that overlapped significantly
 
 **Table S`r numbering("supp.table.counter")`**: A list of the six module pairs, from Morandin _et al._ 2016 and the present study, which had significantly more genes in common than expected by chance. The p-values were calculated by running hypergeometric tests on all possible pairs of modules from the two studies, and then adjusting all the p-values using the Benjamini-Hochberg procedure. 
 ```{r morandin, warning=FALSE, message=FALSE}
-morandin.orthology <- read.csv("data/Morandin to Holman orthology.csv", stringsAsFactors = FALSE)
-morandin.module.membership <- read.csv("data/Morandin module membership.csv", stringsAsFactors = FALSE)
-morandin.module.caste.bias <- read.csv("data/Morandin module caste bias.csv", stringsAsFactors = FALSE)
+morandin.orthology <- read.csv("data/morandin_comparison_data/Morandin to Holman orthology.csv", stringsAsFactors = FALSE)
+morandin.module.membership <- read.csv("data/morandin_comparison_data/Morandin module membership.csv", stringsAsFactors = FALSE)
+morandin.module.caste.bias <- read.csv("data/morandin_comparison_data/Morandin module caste bias.csv", stringsAsFactors = FALSE)
 # Create list of all the L. niger & L. flavus genes are are part of
 # the Orthologous Gene Groups (OGGs) from Morandin et al.
 # Here are the 3634 genes for which we have 1-to-1 orthologs in all 18 species:
@@ -1244,7 +1235,7 @@ GO.and.KEGG.enrichment <- function(enriched.genes, gene.universe, ontology, pan 
   output <- rbind(kegg.enrichment(enriched.genes, gene.universe), 
                   GO.enrichment(enriched.genes, gene.universe, ontology)) 
   if(!pan) return(output)
-  output %>% pander(split.cell = 40, split.table = Inf)
+  output %>% kable.table()
 }
 
 # Find the names for the genes in a given module
@@ -1280,39 +1271,33 @@ load("data/gene_set_collection.RData")
 
 # Load the gene set collection object needed for the KEGG tests
 load("data/gene_set_collection_kegg.RData")
-
 ```
 
 
 ### KEGG and GO enrichment for differentially expressed genes in _A. mellifera_
 **Table S`r numbering("supp.table.counter")`**: Results of KEGG and GO enrichment analysis on the list of genes that were significantly upregulated in the **control** group in _A. mellifera_. The gene universe was defined as all _A. mellifera_ genes measured in this study.
- <br/><br/> 
-<input type=button class=hideshow></input>
 ```{r apis.up.exp.go, showWarnings = FALSE}
 gene.universe.apis <- (tbl(my_db, "rsem_am") %>% 
                          as.data.frame())$gene
 up.in.control.apis <- (apis.de %>% filter(`Log2 FC` > 0) %>% as.data.frame())$Gene
-suppressMessages(GO.and.KEGG.enrichment(up.in.control.apis, gene.universe.apis, ontology = "BP") )
+suppressMessages(GO.and.KEGG.enrichment(up.in.control.apis, gene.universe.apis, ontology = "BP"))
 ```
 
-**Table S`r numbering("supp.table.counter")`**: Results of KEGG and GO enrichment analysis on the list of genes that were significantly upregulated in the **queen pheromone** treatment in _A. mellifera_. The gene universe was defined as all _A. mellifera_ genes measured in this study.
  <br/><br/> 
-<input type=button class=hideshow></input>
+**Table S`r numbering("supp.table.counter")`**: Results of KEGG and GO enrichment analysis on the list of genes that were significantly upregulated in the **queen pheromone** treatment in _A. mellifera_. The gene universe was defined as all _A. mellifera_ genes measured in this study.
 ```{r apis.down.exp.go, showWarnings = FALSE}
 up.in.QP.apis <- (apis.de %>% filter(`Log2 FC` < 0) %>% as.data.frame())$Gene
-GO.and.KEGG.enrichment(up.in.QP.apis, gene.universe.apis, ontology = "BP")
+GO.and.KEGG.enrichment(up.in.QP.apis, gene.universe.apis, ontology = "BP") 
 ```
 
 
 
 ### KEGG and GO enrichment for differentially expressed genes in _L. flavus_
 **Table S`r numbering("supp.table.counter")`**: Results of KEGG and GO enrichment analysis on the list of genes that were significantly upregulated in the **control** group in _L. flavus_. The gene universe was defined as all _L. flavus_ genes for which we detected an _A. mellifera_ ortholog.
- <br/><br/> 
-<input type=button class=hideshow></input>
 ```{r flavus.up.exp.go}
 # The gene universe is all L. flavus genes for which we found a BLAST hit in Apis mellifera
 gene.universe.flavus <- (left_join(tbl(my_db, "rsem_lf") %>% 
-                                     dplyr::select(gene), 
+                                     dplyr::select(gene),  
                                    tbl(my_db, "lf2am") %>% 
                                      dplyr::rename(gene = lf), by = "gene") %>% 
                            dplyr::select(am) %>% 
@@ -1324,24 +1309,21 @@ up.in.control.flavus <- (flavus.de %>% filter(`Log2 FC` > 0 & `Apis BLAST` != " 
 GO.and.KEGG.enrichment(up.in.control.flavus, gene.universe.flavus, ontology = "BP")
 ```
 
-**Table S`r numbering("supp.table.counter")`**: Results of KEGG and GO enrichment analysis on the list of genes that were significantly upregulated in the **queen pheromone** treatment in _L. flavus_. The gene universe was defined as all _L. flavus_ genes for which we detected an _A. mellifera_ ortholog.
  <br/><br/> 
-<input type=button class=hideshow></input>
+**Table S`r numbering("supp.table.counter")`**: Results of KEGG and GO enrichment analysis on the list of genes that were significantly upregulated in the **queen pheromone** treatment in _L. flavus_. The gene universe was defined as all _L. flavus_ genes for which we detected an _A. mellifera_ ortholog.
 ```{r flavus.down.exp.go}
 up.in.QP.flavus <- (flavus.de %>% filter(`Log2 FC` < 0 & `Apis BLAST` != " ") %>% as.data.frame())$`Apis BLAST` %>% unique
-GO.and.KEGG.enrichment(up.in.QP.flavus, gene.universe.flavus, ontology = "BP")
+GO.and.KEGG.enrichment(up.in.QP.flavus, gene.universe.flavus, ontology = "BP") 
 ```
 
 
 ### KEGG and GO enrichment for differentially expressed genes in _L. niger_
 **Table S`r numbering("supp.table.counter")`**: Results of KEGG and GO enrichment analysis on the list of genes that were significantly upregulated in the **control** group in _L. niger_ The gene universe was defined as all _L. niger_ genes for which we detected an _A. mellifera_ ortholog.
- <br/><br/> 
-<input type=button class=hideshow></input>
 ```{r niger.up.exp.go}
 # The gene universe is all L. flavus genes for which we found a BLAST hit in Apis mellifera
 gene.universe.niger <- (left_join(tbl(my_db, "rsem_ln") %>% 
                                     dplyr::select(gene), 
-                                  tbl(my_db, "ln2am") %>% 
+                                  tbl(my_db, "ln2am") %>%  
                                     dplyr::rename(gene = ln), by = "gene") %>% 
                           dplyr::select(am) %>% 
                           filter(!is.na(am)) %>% 
@@ -1352,22 +1334,19 @@ up.in.control.niger <- (niger.de %>% filter(`Log2 FC` > 0 & `Apis BLAST` != " ")
 GO.and.KEGG.enrichment(up.in.control.niger, gene.universe.niger, ontology = "BP") 
 ```
 
-**Table S`r numbering("supp.table.counter")`**: Results of KEGG and GO enrichment analysis on the list of genes that were significantly upregulated in the **queen pheromone** treatment in _L. niger_ The gene universe was defined as all _L. niger_ genes for which we detected an _A. mellifera_ ortholog.
  <br/><br/> 
-<input type=button class=hideshow></input>
+**Table S`r numbering("supp.table.counter")`**: Results of KEGG and GO enrichment analysis on the list of genes that were significantly upregulated in the **queen pheromone** treatment in _L. niger_ The gene universe was defined as all _L. niger_ genes for which we detected an _A. mellifera_ ortholog.
 ```{r niger.down.exp.go}
 up.in.QP.niger <- (niger.de %>% filter(`Log2 FC` < 0 & `Apis BLAST` != " ") %>% as.data.frame())$`Apis BLAST` %>% unique
-GO.and.KEGG.enrichment(up.in.QP.niger, gene.universe.niger, ontology = "BP") 
+GO.and.KEGG.enrichment(up.in.QP.niger, gene.universe.niger, ontology = "BP")  
 ```
 
 
 ### KEGG and GO enrichment for differentially expressed genes observed in multiple species
 **Table S`r numbering("supp.table.counter")`**: Results of KEGG and GO enrichment analysis on the list of genes showing significant differential expression in response to queen pheromone in two or more species. The gene universe was defined as all genes for which we found an ortholog in all four species.
- <br/><br/>
-<input type=button class=hideshow></input>
 ```{r overlap.go, messages=FALSE}
 overlap.gene.universe <- make.OGGs(c("am", "lf", "ln"))[[2]]$am      # The gene universe is all genes that have orthologs in the 3 species that we tested for overlap
-suppressWarnings(GO.and.KEGG.enrichment(all.overlaps, overlap.gene.universe, ontology = "BP"))
+suppressWarnings(GO.and.KEGG.enrichment(all.overlaps, overlap.gene.universe, ontology = "BP")) 
 ```
 
 
@@ -1384,8 +1363,6 @@ gene.universe.apis.splicing <- (tbl(my_db, "isoforms_am") %>%
 ```
 
 **Table S`r numbering("supp.table.counter")`**: Results of KEGG and GO enrichment analysis on the list of genes showing significant alternative splicing in _A. mellifera_. The gene universe was defined as all genes that showed alternative splicing in _A. mellifera_.
- <br/><br/> 
-<input type=button class=hideshow></input>
 ```{r apis.go}
 GO.and.KEGG.enrichment(am.alt.splice$Gene, gene.universe.apis.splicing, ontology = "BP") 
 ```
@@ -1409,8 +1386,6 @@ alt.spliced.flavus <- (tbl(my_db, "lf2am") %>%
 ```
 
 **Table S`r numbering("supp.table.counter")`**: Results of KEGG and GO enrichment analysis on the list of genes showing significant alternative splicing in _L. flavus_. The gene universe was defined as all genes that showed alternative splicing in _L. flavus_, which also had a known ortholog in _A. mellifera_.
- <br/><br/> 
-<input type=button class=hideshow></input>
 ```{r}
 GO.and.KEGG.enrichment(alt.spliced.flavus, gene.universe.flavus, ontology = "BP")
 ```
@@ -1542,96 +1517,74 @@ gene.universe.modules <- OGGs[[2]]$am
 
 ### Enriched KEGG and GO terms in module 1
 **Table S`r numbering("supp.table.counter")`**: Results of KEGG and GO enrichment analysis for the genes in Module 1. The gene universe was defined as all genes for which we found an ortholog in all four species.
- <br/><br/> 
-<input type=button class=hideshow></input>
 ```{r}
 GO.and.KEGG.enrichment(genes.in.module(1), gene.universe.modules, ontology = "BP")
 ```
 
 ### Enriched KEGG and GO terms in module 2
 **Table S`r numbering("supp.table.counter")`**: Results of KEGG and GO enrichment analysis for the genes in Module 2. The gene universe was defined as all genes for which we found an ortholog in all four species.
- <br/><br/> 
-<input type=button class=hideshow></input>
 ```{r}
 GO.and.KEGG.enrichment(genes.in.module(2), gene.universe.modules, ontology = "BP")
 ```
 
 ### Enriched KEGG and GO terms in module 3
 **Table S`r numbering("supp.table.counter")`**: Results of KEGG and GO enrichment analysis for the genes in Module 3. The gene universe was defined as all genes for which we found an ortholog in all four species.
- <br/><br/> 
-<input type=button class=hideshow></input>
 ```{r}
 GO.and.KEGG.enrichment(genes.in.module(3), gene.universe.modules, ontology = "BP") 
 ```
 
 ### Enriched KEGG and GO terms in module 4
 **Table S`r numbering("supp.table.counter")`**: Results of KEGG and GO enrichment analysis for the genes in Module 4. The gene universe was defined as all genes for which we found an ortholog in all four species.
- <br/><br/> 
-<input type=button class=hideshow></input>
 ```{r}
 GO.and.KEGG.enrichment(genes.in.module(4), gene.universe.modules, ontology = "BP") 
 ```
 
 ### Enriched KEGG and GO terms in module 5
 **Table S`r numbering("supp.table.counter")`**: Results of KEGG and GO enrichment analysis for the genes in Module 5. The gene universe was defined as all genes for which we found an ortholog in all four species.
- <br/><br/> 
-<input type=button class=hideshow></input>
 ```{r}
 GO.and.KEGG.enrichment(genes.in.module(5), gene.universe.modules, ontology = "BP")
 ```
 
 ### Enriched KEGG and GO terms in module 6
 **Table S`r numbering("supp.table.counter")`**: Results of KEGG and GO enrichment analysis for the genes in Module 6. The gene universe was defined as all genes for which we found an ortholog in all four species.
- <br/><br/> 
-<input type=button class=hideshow></input>
 ```{r}
 GO.and.KEGG.enrichment(genes.in.module(6), gene.universe.modules, ontology = "BP")
 ```
 
 ### Enriched KEGG and GO terms in module 7
 **Table S`r numbering("supp.table.counter")`**: Results of KEGG and GO enrichment analysis for the genes in Module 7. The gene universe was defined as all genes for which we found an ortholog in all four species.
- <br/><br/> 
-<input type=button class=hideshow></input>
 ```{r}
 GO.and.KEGG.enrichment(genes.in.module(7), gene.universe.modules, ontology = "BP")
 ```
 
 ### Enriched KEGG and GO terms in module 8
 **Table S`r numbering("supp.table.counter")`**: Results of KEGG and GO enrichment analysis for the genes in Module 8. The gene universe was defined as all genes for which we found an ortholog in all four species.
- <br/><br/> 
-<input type=button class=hideshow></input>
 ```{r}
 GO.and.KEGG.enrichment(genes.in.module(8), gene.universe.modules, ontology = "BP")
 ```
 
 ### Enriched KEGG and GO terms in module 9
 **Table S`r numbering("supp.table.counter")`**: Results of KEGG and GO enrichment analysis for the genes in Module 9. The gene universe was defined as all genes for which we found an ortholog in all four species.
- <br/><br/> 
-<input type=button class=hideshow></input>
 ```{r}
 GO.and.KEGG.enrichment(genes.in.module(9), gene.universe.modules, ontology = "BP")
 ```
 
 ## Inspect the gene list for the pheromone-sensitive module 4
 **Table S`r numbering("supp.table.counter")`**: List of all the genes in Module 4, ranked by their within-module connectivity, *k*. The latter four columns give the Log$_2$ fold-change in expression in response to queen pheromone in each of the four species.
- <br/><br/> 
-<input type=button class=hideshow></input>
 ```{r warning=FALSE, message=FALSE}
 inspect.module.genes(4) %>% 
   mutate(am_fc=log2(am_fc), bt_fc=log2(bt_fc), lf_fc=log2(lf_fc), ln_fc=log2(ln_fc)) %>% 
   rename(Gene=gene, Name=name) %>% 
-  pander(split.cell = 40, split.table = Inf)
+  kable.table()
 ```
 
 ## Inspect the gene list for the pheromone-sensitive module 9
 **Table S`r numbering("supp.table.counter")`**: List of all the genes in Module 9, ranked by their within-module connectivity, *k*. The latter four columns give the Log$_2$ fold-change in expression in response to queen pheromone in each of the four species.
- <br/><br/> 
-<input type=button class=hideshow></input>
 ```{r warning=FALSE, message=FALSE}
 inspect.module.genes(9) %>% 
   mutate(am_fc=log2(am_fc), bt_fc=log2(bt_fc), lf_fc=log2(lf_fc), ln_fc=log2(ln_fc)) %>% 
   rename(Gene=gene, Name=name) %>% 
-  pander(split.cell = 40, split.table = Inf)
+  kable.table()
 ```
 
 
@@ -1641,23 +1594,7 @@ This section shows the operating system and R packages used to produce this docu
 sessionInfo() %>% pander()
 ```
 
-
-
-
-<!-- Some JavaScript to control the buttons to show/hide the big tables -->
-<script>
-$( "input.hideshow" ).each( function ( index, button ) {
-  button.value = 'Hide Output';
-  $( button ).click( function () {
-    var target = this.nextSibling ? this : this.parentNode;
-     target = target.nextSibling.nextSibling.nextSibling.nextSibling.nextSibling;
-    if ( target.style.display == 'block' || target.style.display == '' ) {
-      target.style.display = 'none';
-      this.value = 'Show Output';
-    } else {
-      target.style.display = 'block';
-      this.value = 'Hide Output';
-    }
-  } );
-} );
-</script>
+```{r echo = FALSE}
+# Get rid of this file of connectivity values
+unlink("blockwiseTOM-block.1.RData")
+```
