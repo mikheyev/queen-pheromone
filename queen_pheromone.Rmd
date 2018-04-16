@@ -9,7 +9,6 @@ output:
     number_sections: false 
     theme: yeti 
     code_folding: hide #
-  pdf_document: default
 ---
 
 This document was prepared in R Markdown, then translated into html using the R package `knitr`. Press the buttons labelled **Code** to show or hide the R code used to produce each table, plot or statistical result. You can also select 'Show all code' in the top left corner.
@@ -1598,3 +1597,4 @@ sessionInfo() %>% pander()
 # Get rid of this file of connectivity values
 unlink("blockwiseTOM-block.1.RData")
 ```
+
