@@ -1187,7 +1187,7 @@ First, define some functions we will need. See also the R script "Script to set 
 
 There are only two differentially expressed genes for _B. terrestris_, so it is only meaningful to test for enriched GO/KEGG terms in the other three species.
 ```{r module.funs, warnings = FALSE}
-GO.and.KEGG.enrichment <- function(enriched.genes, gene.universe, ontology, pan = TRUE, keep.all = FALSE){
+GO.and.KEGG.enrichment <- function(enriched.genes, gene.universe, kable = TRUE, keep.all = FALSE){
   
   p <- 0.05
   neatness <- function(x, dp) format(round(x, dp), nsmall = 3)
@@ -1204,12 +1204,17 @@ GO.and.KEGG.enrichment <- function(enriched.genes, gene.universe, ontology, pan 
       conditional = TRUE, # Do the test conditional on the GO structure
       testDirection = "over") # Look for over-represented GO terms, not under
     
-    hyperGTest(params) %>%
+    output <- hyperGTest(params) %>%
       summary() %>% 
       dplyr::mutate(Pvalue = neatness(Pvalue, 5),
                     OddsRatio = neatness(OddsRatio, 3),
-                    ExpCount = neatness(ExpCount, 3)) %>%
-      dplyr::rename(ID = GOBPID)
+                    ExpCount = neatness(ExpCount, 3)) 
+    names(output)[1] <- "ID"
+    type <- "Biological process"
+    if(ontology == "MF") type <- "Molecular function"
+    if(ontology == "CC") type <- "Cellular component"
+    if(nrow(output)==0) return(NULL)
+    data.frame(Test_type = paste("GO", type, sep = ": "), output)
   }
   
   kegg.enrichment <- function(enriched.genes, gene.universe){
@@ -1222,18 +1227,21 @@ GO.and.KEGG.enrichment <- function(enriched.genes, gene.universe, ontology, pan 
       pvalueCutoff = p,
       testDirection = "over") # Look for over-represented KEGG terms, not under
     
-    hyperGTest(params) %>% 
+    output <- hyperGTest(params) %>% 
       summary() %>% 
       dplyr::mutate(Pvalue = neatness(Pvalue, 5),
                     OddsRatio = neatness(OddsRatio, 3),
                     ExpCount = neatness(ExpCount, 3),
                     KEGGID = paste("KEGG", KEGGID, sep = ":")) %>%
-      dplyr::rename(ID = KEGGID)
+      rename(ID = KEGGID)
+    data.frame(Test_type = "KEGG", output)
   }
   
   output <- rbind(kegg.enrichment(enriched.genes, gene.universe), 
-                  GO.enrichment(enriched.genes, gene.universe, ontology)) 
-  if(!pan) return(output)
+                  GO.enrichment(enriched.genes, gene.universe, "BP"),
+                  GO.enrichment(enriched.genes, gene.universe, "MF"),
+                  GO.enrichment(enriched.genes, gene.universe, "CC")) 
+  if(!kable) return(output)
   output %>% kable.table()
 }
 
@@ -1279,14 +1287,14 @@ load("data/gene_set_collection_kegg.RData")
 gene.universe.apis <- (tbl(my_db, "rsem_am") %>% 
                          as.data.frame())$gene
 up.in.control.apis <- (apis.de %>% filter(`Log2 FC` > 0) %>% as.data.frame())$Gene
-suppressMessages(GO.and.KEGG.enrichment(up.in.control.apis, gene.universe.apis, ontology = "BP"))
+suppressMessages(GO.and.KEGG.enrichment(up.in.control.apis, gene.universe.apis))
 ```
 
  <br/><br/> 
 **Table S`r numbering("supp.table.counter")`**: Results of KEGG and GO enrichment analysis on the list of genes that were significantly upregulated in the **queen pheromone** treatment in _A. mellifera_. The gene universe was defined as all _A. mellifera_ genes measured in this study.
 ```{r apis.down.exp.go, showWarnings = FALSE}
 up.in.QP.apis <- (apis.de %>% filter(`Log2 FC` < 0) %>% as.data.frame())$Gene
-GO.and.KEGG.enrichment(up.in.QP.apis, gene.universe.apis, ontology = "BP") 
+GO.and.KEGG.enrichment(up.in.QP.apis, gene.universe.apis) 
 ```
 
 
@@ -1305,14 +1313,14 @@ gene.universe.flavus <- (left_join(tbl(my_db, "rsem_lf") %>%
 # The test set is all differentially expressed genes in L. flavus for which we found a BLAST hit in Apis
 up.in.control.flavus <- (flavus.de %>% filter(`Log2 FC` > 0 & `Apis BLAST` != " ") %>% as.data.frame())$`Apis BLAST` %>% unique
 
-GO.and.KEGG.enrichment(up.in.control.flavus, gene.universe.flavus, ontology = "BP")
+GO.and.KEGG.enrichment(up.in.control.flavus, gene.universe.flavus)
 ```
 
  <br/><br/> 
 **Table S`r numbering("supp.table.counter")`**: Results of KEGG and GO enrichment analysis on the list of genes that were significantly upregulated in the **queen pheromone** treatment in _L. flavus_. The gene universe was defined as all _L. flavus_ genes for which we detected an _A. mellifera_ ortholog.
 ```{r flavus.down.exp.go}
 up.in.QP.flavus <- (flavus.de %>% filter(`Log2 FC` < 0 & `Apis BLAST` != " ") %>% as.data.frame())$`Apis BLAST` %>% unique
-GO.and.KEGG.enrichment(up.in.QP.flavus, gene.universe.flavus, ontology = "BP") 
+GO.and.KEGG.enrichment(up.in.QP.flavus, gene.universe.flavus) 
 ```
 
 
@@ -1330,14 +1338,14 @@ gene.universe.niger <- (left_join(tbl(my_db, "rsem_ln") %>%
 # The test set is all differentially expressed genes in L. flavus for which we found a BLAST hit in Apis
 up.in.control.niger <- (niger.de %>% filter(`Log2 FC` > 0 & `Apis BLAST` != " ") %>% as.data.frame())$`Apis BLAST` %>% unique
 
-GO.and.KEGG.enrichment(up.in.control.niger, gene.universe.niger, ontology = "BP") 
+GO.and.KEGG.enrichment(up.in.control.niger, gene.universe.niger) 
 ```
 
  <br/><br/> 
 **Table S`r numbering("supp.table.counter")`**: Results of KEGG and GO enrichment analysis on the list of genes that were significantly upregulated in the **queen pheromone** treatment in _L. niger_ The gene universe was defined as all _L. niger_ genes for which we detected an _A. mellifera_ ortholog.
 ```{r niger.down.exp.go}
 up.in.QP.niger <- (niger.de %>% filter(`Log2 FC` < 0 & `Apis BLAST` != " ") %>% as.data.frame())$`Apis BLAST` %>% unique
-GO.and.KEGG.enrichment(up.in.QP.niger, gene.universe.niger, ontology = "BP")  
+GO.and.KEGG.enrichment(up.in.QP.niger, gene.universe.niger)  
 ```
 
 
@@ -1345,7 +1353,7 @@ GO.and.KEGG.enrichment(up.in.QP.niger, gene.universe.niger, ontology = "BP")
 **Table S`r numbering("supp.table.counter")`**: Results of KEGG and GO enrichment analysis on the list of genes showing significant differential expression in response to queen pheromone in two or more species. The gene universe was defined as all genes for which we found an ortholog in all four species.
 ```{r overlap.go, messages=FALSE}
 overlap.gene.universe <- make.OGGs(c("am", "lf", "ln"))[[2]]$am      # The gene universe is all genes that have orthologs in the 3 species that we tested for overlap
-suppressWarnings(GO.and.KEGG.enrichment(all.overlaps, overlap.gene.universe, ontology = "BP")) 
+suppressWarnings(GO.and.KEGG.enrichment(all.overlaps, overlap.gene.universe)) 
 ```
 
 
@@ -1363,7 +1371,7 @@ gene.universe.apis.splicing <- (tbl(my_db, "isoforms_am") %>%
 
 **Table S`r numbering("supp.table.counter")`**: Results of KEGG and GO enrichment analysis on the list of genes showing significant alternative splicing in _A. mellifera_. The gene universe was defined as all genes that showed alternative splicing in _A. mellifera_.
 ```{r apis.go}
-GO.and.KEGG.enrichment(am.alt.splice$Gene, gene.universe.apis.splicing, ontology = "BP") 
+GO.and.KEGG.enrichment(am.alt.splice$Gene, gene.universe.apis.splicing) 
 ```
 
 ### KEGG and GO enrichment for _L. flavus_ genes showing pheromone-modulated alternative splicing
@@ -1386,7 +1394,7 @@ alt.spliced.flavus <- (tbl(my_db, "lf2am") %>%
 
 **Table S`r numbering("supp.table.counter")`**: Results of KEGG and GO enrichment analysis on the list of genes showing significant alternative splicing in _L. flavus_. The gene universe was defined as all genes that showed alternative splicing in _L. flavus_, which also had a known ortholog in _A. mellifera_.
 ```{r}
-GO.and.KEGG.enrichment(alt.spliced.flavus, gene.universe.flavus, ontology = "BP")
+GO.and.KEGG.enrichment(alt.spliced.flavus, gene.universe.flavus)
 ```
 
 ### KEGG and GO enrichment for _L. niger_ genes showing pheromone-modulated alternative splicing
@@ -1409,7 +1417,7 @@ alt.spliced.niger <- (tbl(my_db, "ln2am") %>%
 
 **Table S`r numbering("supp.table.counter")`**: Results of KEGG and GO enrichment analysis on the list of genes showing significant alternative splicing in _L. niger_. The gene universe was defined as all genes that showed alternative splicing in _L. niger_, which also had a known ortholog in _A. mellifera_.
 ```{r}
-GO.and.KEGG.enrichment(alt.spliced.niger, gene.universe.niger.splicing, ontology = "BP") 
+GO.and.KEGG.enrichment(alt.spliced.niger, gene.universe.niger.splicing) 
 ```
 
 ## Figures summarising KEGG and GO results
@@ -1417,24 +1425,25 @@ These two figures help to see which KEGG and GO terms showed up more than once, 
 ```{r}
 # First, look for enriched KEGG and GO terms in all the DE gene and isoform lists jsut as before, but this time return all the results (keep.all = TRUE)
 big.table <- rbind(suppressMessages(
-  GO.and.KEGG.enrichment(up.in.control.apis, gene.universe.apis, ontology = "BP", pan = FALSE, keep.all = TRUE) ) %>% 
+  GO.and.KEGG.enrichment(up.in.control.apis, gene.universe.apis, kable = FALSE, keep.all = TRUE) ) %>% 
     mutate(species = "A. mellifera", type = "Up in control"),
-  GO.and.KEGG.enrichment(up.in.QP.apis, gene.universe.apis, ontology = "BP", pan = FALSE, keep.all = TRUE) %>% 
+  GO.and.KEGG.enrichment(up.in.QP.apis, gene.universe.apis, kable = FALSE, keep.all = TRUE) %>% 
     mutate(species = "A. mellifera", type = "Up in QP"),
-  GO.and.KEGG.enrichment(up.in.control.flavus, gene.universe.flavus, ontology = "BP", pan = FALSE, keep.all = TRUE) %>% 
+  GO.and.KEGG.enrichment(up.in.control.flavus, gene.universe.flavus, kable = FALSE, keep.all = TRUE) %>% 
     mutate(species = "L. flavus", type = "Up in control"),
-  GO.and.KEGG.enrichment(up.in.QP.flavus, gene.universe.flavus, ontology = "BP", pan = FALSE, keep.all = TRUE) %>% 
+  GO.and.KEGG.enrichment(up.in.QP.flavus, gene.universe.flavus, kable = FALSE, keep.all = TRUE) %>% 
     mutate(species = "L. flavus", type = "Up in QP"),
-  GO.and.KEGG.enrichment(up.in.control.niger, gene.universe.niger, ontology = "BP", pan = FALSE, keep.all = TRUE) %>% 
+  GO.and.KEGG.enrichment(up.in.control.niger, gene.universe.niger, kable = FALSE, keep.all = TRUE) %>% 
     mutate(species = "L. niger", type = "Up in control"),
-  GO.and.KEGG.enrichment(up.in.QP.niger, gene.universe.niger, ontology = "BP", pan = FALSE, keep.all = TRUE) %>% 
+  GO.and.KEGG.enrichment(up.in.QP.niger, gene.universe.niger, kable = FALSE, keep.all = TRUE) %>% 
     mutate(species = "L. niger", type = "Up in QP"),
-  GO.and.KEGG.enrichment(am.alt.splice$Gene, gene.universe.apis.splicing, ontology = "BP", pan = FALSE, keep.all = TRUE) %>% 
+  GO.and.KEGG.enrichment(am.alt.splice$Gene, gene.universe.apis.splicing,  kable = FALSE, keep.all = TRUE) %>% 
     mutate(species = "A. mellifera", type = "Splicing"),
-  GO.and.KEGG.enrichment(alt.spliced.flavus, gene.universe.flavus, ontology = "BP", pan = FALSE, keep.all = TRUE) %>% 
+  GO.and.KEGG.enrichment(alt.spliced.flavus, gene.universe.flavus, kable = FALSE, keep.all = TRUE) %>% 
     mutate(species = "L. flavus", type = "Splicing"),
-  GO.and.KEGG.enrichment(alt.spliced.niger, gene.universe.niger.splicing, ontology = "BP", pan = FALSE, keep.all = TRUE) %>% 
-    mutate(species = "L. niger", type = "Splicing"))
+  GO.and.KEGG.enrichment(alt.spliced.niger, gene.universe.niger.splicing, kable = FALSE, keep.all = TRUE) %>% 
+    mutate(species = "L. niger", type = "Splicing")) %>% 
+  filter(Test_type %in% c("KEGG", "GO: Biological process"))
 
 # This line means that GO/KEGG categories which did not even appear in the list of enriched genes get a p value of 1 
 plot.data <- expand.grid(ID = unique(big.table$ID), 
@@ -1517,55 +1526,55 @@ gene.universe.modules <- OGGs[[2]]$am
 ### Enriched KEGG and GO terms in module 1
 **Table S`r numbering("supp.table.counter")`**: Results of KEGG and GO enrichment analysis for the genes in Module 1. The gene universe was defined as all genes for which we found an ortholog in all four species.
 ```{r}
-GO.and.KEGG.enrichment(genes.in.module(1), gene.universe.modules, ontology = "BP")
+GO.and.KEGG.enrichment(genes.in.module(1), gene.universe.modules)
 ```
 
 ### Enriched KEGG and GO terms in module 2
 **Table S`r numbering("supp.table.counter")`**: Results of KEGG and GO enrichment analysis for the genes in Module 2. The gene universe was defined as all genes for which we found an ortholog in all four species.
 ```{r}
-GO.and.KEGG.enrichment(genes.in.module(2), gene.universe.modules, ontology = "BP")
+GO.and.KEGG.enrichment(genes.in.module(2), gene.universe.modules)
 ```
 
 ### Enriched KEGG and GO terms in module 3
 **Table S`r numbering("supp.table.counter")`**: Results of KEGG and GO enrichment analysis for the genes in Module 3. The gene universe was defined as all genes for which we found an ortholog in all four species.
 ```{r}
-GO.and.KEGG.enrichment(genes.in.module(3), gene.universe.modules, ontology = "BP") 
+GO.and.KEGG.enrichment(genes.in.module(3), gene.universe.modules) 
 ```
 
 ### Enriched KEGG and GO terms in module 4
 **Table S`r numbering("supp.table.counter")`**: Results of KEGG and GO enrichment analysis for the genes in Module 4. The gene universe was defined as all genes for which we found an ortholog in all four species.
 ```{r}
-GO.and.KEGG.enrichment(genes.in.module(4), gene.universe.modules, ontology = "BP") 
+GO.and.KEGG.enrichment(genes.in.module(4), gene.universe.modules) 
 ```
 
 ### Enriched KEGG and GO terms in module 5
 **Table S`r numbering("supp.table.counter")`**: Results of KEGG and GO enrichment analysis for the genes in Module 5. The gene universe was defined as all genes for which we found an ortholog in all four species.
 ```{r}
-GO.and.KEGG.enrichment(genes.in.module(5), gene.universe.modules, ontology = "BP")
+GO.and.KEGG.enrichment(genes.in.module(5), gene.universe.modules)
 ```
 
 ### Enriched KEGG and GO terms in module 6
 **Table S`r numbering("supp.table.counter")`**: Results of KEGG and GO enrichment analysis for the genes in Module 6. The gene universe was defined as all genes for which we found an ortholog in all four species.
 ```{r}
-GO.and.KEGG.enrichment(genes.in.module(6), gene.universe.modules, ontology = "BP")
+GO.and.KEGG.enrichment(genes.in.module(6), gene.universe.modules,)
 ```
 
 ### Enriched KEGG and GO terms in module 7
 **Table S`r numbering("supp.table.counter")`**: Results of KEGG and GO enrichment analysis for the genes in Module 7. The gene universe was defined as all genes for which we found an ortholog in all four species.
 ```{r}
-GO.and.KEGG.enrichment(genes.in.module(7), gene.universe.modules, ontology = "BP")
+GO.and.KEGG.enrichment(genes.in.module(7), gene.universe.modules)
 ```
 
 ### Enriched KEGG and GO terms in module 8
 **Table S`r numbering("supp.table.counter")`**: Results of KEGG and GO enrichment analysis for the genes in Module 8. The gene universe was defined as all genes for which we found an ortholog in all four species.
 ```{r}
-GO.and.KEGG.enrichment(genes.in.module(8), gene.universe.modules, ontology = "BP")
+GO.and.KEGG.enrichment(genes.in.module(8), gene.universe.modules)
 ```
 
 ### Enriched KEGG and GO terms in module 9
 **Table S`r numbering("supp.table.counter")`**: Results of KEGG and GO enrichment analysis for the genes in Module 9. The gene universe was defined as all genes for which we found an ortholog in all four species.
 ```{r}
-GO.and.KEGG.enrichment(genes.in.module(9), gene.universe.modules, ontology = "BP")
+GO.and.KEGG.enrichment(genes.in.module(9), gene.universe.modules)
 ```
 
 ## Inspect the gene list for the pheromone-sensitive module 4
@@ -1595,6 +1604,6 @@ sessionInfo() %>% pander()
 
 ```{r echo = FALSE}
 # Get rid of this file of connectivity values
-unlink("blockwiseTOM-block.1.RData")
+# unlink("blockwiseTOM-block.1.RData")
 ```
 
