@@ -57,9 +57,9 @@ bad.samples <- c("lf1", "ln1", "ln12", "lf12")
 ```
 
 ```{r echo=FALSE, results='hide'}
-library(knitr) # set up cacheing to save time when re-building html document
+# library(knitr) # set up cacheing to save time when re-building html document # `r opts_chunk$set(cache=TRUE)`
 ```
-`r opts_chunk$set(cache=TRUE)`
+
 
 ```{r echo=FALSE, results='hide'}
 table.counter <- 1
@@ -255,26 +255,26 @@ names(niger.de) <- gsub("_", " ", names(niger.de))
 ```
 
 ### _Apis mellifera_
-**Table S`r numbering("supp.table.counter")`**: List of the `r nrow(apis.de)` significantly differentially expressed genes (EBseq; posterior probability of differential expression p < 0.05) in _Apis mellifera_, listed in order of fold change in gene expression on a Log$_2$ scale. Positive fold change values indicate higher expression in the control, while negative values indicate higher expression in the queen pheromone treatment.
+**Table S`r numbering("supp.table.counter")`**: List of the `r nrow(apis.de)` significantly differentially expressed genes (EBseq; FDR-corrected posterior probability of differential expression p < 0.05) in _Apis mellifera_, listed in order of fold change in gene expression on a Log$_2$ scale. Positive fold change values indicate higher expression in the control, while negative values indicate higher expression in the queen pheromone treatment.
 ```{r apis.de}
 kable.table(apis.de)
 ```
 
 ### _Bombus terrestris_
-**Table S`r numbering("supp.table.counter")`**: The single significantly differentially expressed gene (EBseq; posterior probability of differential expression p < 0.05) in _Bombus terrestris_. Positive fold change values indicate higher expression in the control, while negative values indicate higher expression in the queen pheromone treatment. The second and third columns give the best BLAST hit for this gene in _A. mellifera_ plus the name of the _A. mellifera_ putative ortholog. 
+**Table S`r numbering("supp.table.counter")`**: The single significantly differentially expressed gene (EBseq; FDR-corrected posterior probability of differential expression p < 0.05) in _Bombus terrestris_. Positive fold change values indicate higher expression in the control, while negative values indicate higher expression in the queen pheromone treatment. The second and third columns give the best BLAST hit for this gene in _A. mellifera_ plus the name of the _A. mellifera_ putative ortholog. 
 ```{r}
 kable(bombus.de, "html") %>%
   kable_styling()
 ```
 
 ### _Lasius flavus_
-**Table S`r numbering("supp.table.counter")`**: List of the `r nrow(flavus.de)` significantly differentially expressed genes (EBseq; posterior probability of differential expression p < 0.05) in _Lasius flavus_, listed in order of fold change in gene expression on a Log$_2$ scale. Positive fold change values indicate higher expression in the control, while negative values indicate higher expression in the queen pheromone treatment. The second and third columns give the best BLAST hit for this gene in _A. mellifera_ plus the name of the _A. mellifera_ putative ortholog. 
+**Table S`r numbering("supp.table.counter")`**: List of the `r nrow(flavus.de)` significantly differentially expressed genes (EBseq; FDR-corrected posterior probability of differential expression p < 0.05) in _Lasius flavus_, listed in order of fold change in gene expression on a Log$_2$ scale. Positive fold change values indicate higher expression in the control, while negative values indicate higher expression in the queen pheromone treatment. The second and third columns give the best BLAST hit for this gene in _A. mellifera_ plus the name of the _A. mellifera_ putative ortholog. 
 ```{r}
 kable.table(flavus.de)
 ```
 
 ### _Lasius niger_
-**Table S`r numbering("supp.table.counter")`**: List of the `r nrow(niger.de)` significantly differentially expressed genes (EBseq; posterior probability of differential expression p < 0.05) in _Lasius niger_, listed in order of fold change in gene expression on a Log$_2$ scale. Positive fold change values indicate higher expression in the control, while negative values indicate higher expression in the queen pheromone treatment. The second and third columns give the best BLAST hit for this gene in _A. mellifera_ plus the name of the _A. mellifera_ putative ortholog. 
+**Table S`r numbering("supp.table.counter")`**: List of the `r nrow(niger.de)` significantly differentially expressed genes (EBseq; FDR-corrected posterior probability of differential expression p < 0.05) in _Lasius niger_, listed in order of fold change in gene expression on a Log$_2$ scale. Positive fold change values indicate higher expression in the control, while negative values indicate higher expression in the queen pheromone treatment. The second and third columns give the best BLAST hit for this gene in _A. mellifera_ plus the name of the _A. mellifera_ putative ortholog. 
 ```{r}
 kable.table(niger.de)
 ```
@@ -282,7 +282,7 @@ kable.table(niger.de)
 
 
 ## Genes that are differentially expressed in multiple species
-In Tables S6-S7, we have simply listed the genes that showed statistically significant differential expression in two or more species. This method makes few false positives, but it likely misses many of true overlaps because our study has modest power to detect differential expression.
+In Tables S6-S7, we have simply listed the genes that showed statistically significant differential expression in two or more species. This method is expected to make few 'false positive' errors, but it probably misses many of true overlaps because our study has modest power to detect differential expression (that is, the 'false negative' rate is high).
 
 In Table S8, we instead look for similarities between species using a method that ranks genes from most- to least- phermone sensitive based on log fold change, alleviating the problem of low power. To do this, we select the top $n$ genes per species (where $n$ = 100, 200... 500), based on the absolute magnitude of the log fold-change response to queen pheromone, giving a list of the most pheromone-sensitive genes. This method produces fewer false negatives in our search for overlapping genes, at cost of increasing the false positive rate.
 
@@ -894,10 +894,10 @@ treatments.network.plot <- function(dat){
 
 eigen.data %>% treatments.network.plot()
 ggsave(eigen.data %>% treatments.network.plot(), 
-       file = "figures/Module eigengenes.pdf", height = 6.6, width = 8)
+       file = "figures/Figure 3 - Module eigengenes.pdf", height = 6.6, width = 8)
 ```
  <br/><br/> 
- **Figure 4**: The figure shows the distribution of module eigengenes for each combination of module, species, and queen pheromone (QP) treatment. Positive values mean that the focal group has higher eigengenes, which derived from the relative expression levels of a module of genes, than the average. 
+ **Figure 3**: The figure shows the distribution of module eigengenes for each combination of module, species, and queen pheromone (QP) treatment. Positive values mean that the focal group has higher eigengenes, which derived from the relative expression levels of a module of genes, than the average. 
 
 
 
@@ -989,11 +989,13 @@ In this section, we search for correlates of the absolute Log_2 fold change in r
 
 3. The CpG O/E values were calculated by Yi and colleagues for the latest _A. mellifera_ genome annotation (as of late 2017). We found a positive correlation between CpG O/E and pheromone-sensitivity. High CpG is associated with lower rate of DNA methylation, again suggesting that pheromone-sensitive genes are hypomethylated. 
 
-4. The estimates of $\gamma$, a measure of positive and negative selection similar to dN/dS, come from Harpur et al. 2014 PNAS. There was a significant positive correlation between $\gamma$ and sensitivity to queen pheromone, suggesting that highly pheromone-sensitive genes tend to be positively selected.
+4. The columns on the H3K4me3, H3K27ac, and H3K36me3 histon modifications were calculated from the raw data from Wojciechowski et al. 2018, using the code in the separate R script `wojciechowski_histone_analysis.R`.
 
-5. The codon adaptation index was provided by Brendan Hunt. A high codon adaptation index denotes high codon usage bias, meaning that certain synonymous codons are more common than others. Pheromone-sensitive genes showed low codon usage bias.
+5. The estimates of $\gamma$, a measure of positive and negative selection similar to dN/dS, come from Harpur et al. 2014 PNAS. There was a significant positive correlation between $\gamma$ and sensitivity to queen pheromone, suggesting that highly pheromone-sensitive genes tend to be positively selected.
 
-6. Lastly, 'expression level' refers to the average expression of each gene, expressed as TPM (transcripts per million) as measured by the software RSEM in the present study. Highly expressed genes tended to be less pheromone-sensitive.
+6. The codon adaptation index was provided by Brendan Hunt. A high codon adaptation index denotes high codon usage bias, meaning that certain synonymous codons are more common than others. Pheromone-sensitive genes showed low codon usage bias.
+
+7. Lastly, 'expression level' refers to the average expression of each gene, expressed as TPM (transcripts per million) as measured by the software RSEM in the present study. Highly expressed genes tended to be less pheromone-sensitive.
 
 ```{r fig.height=9, fig.width=9}
 # import and clean up the data provided by Brendan Hunt
@@ -1052,15 +1054,13 @@ merged <- hunt.data %>% dplyr::select(gene, PostFC, log2Q.SW, log2RW.SW, CAI) %>
   as.data.frame() #%>%
   # dplyr::select(-gene) 
 
-# Add the data from Hurd et al. 2018 Genome Biology
+# Add the data from Wojciechowski et al. 2018 Genome Biology
 # There is gene-level data on the caste difference in 3 different histone modifications (from ChIP-seq),
-# And gene-level RNA-seq data on the difference between queen and worker-destined larvae (aged 96h post-laying)
-# These data were created from Hurd et al.'s raw data, as described in the separate R script hurd_histone_analysis.R
+# These data were created from Wojciechowski et al.'s raw data, as described in the separate R script wojciechowski_histone_analysis.R
 merged <- merged %>% 
-  left_join(tbl(my_db, "H3K4me3_ebseq") %>% collect() %>% mutate(H3K4me3_caste = abs(log2(PostFC))) %>% select(gene, H3K4me3_caste), by = "gene") %>%
-  left_join(tbl(my_db, "H3K27ac_ebseq") %>% collect() %>% mutate(H3K27ac_caste = abs(log2(PostFC))) %>% select(gene, H3K27ac_caste), by = "gene") %>%
-  left_join(tbl(my_db, "H3K36me3_ebseq") %>% collect() %>% mutate(H3K36me3_caste = abs(log2(PostFC))) %>% select(gene, H3K36me3_caste), by = "gene") %>%
-  left_join(tbl(my_db, "hurd_ebseq_gene") %>% collect() %>% mutate(larva_caste = (log2(PostFC))) %>% select(gene, larva_caste), by = "gene") %>%
+  left_join(tbl(my_db, "H3K4me3") %>% collect() %>% mutate(H3K4me3_caste = caste_difference) %>% select(gene, H3K4me3_caste), by = "gene") %>%
+  left_join(tbl(my_db, "H3K27ac") %>% collect() %>% mutate(H3K27ac_caste = caste_difference) %>% select(gene, H3K27ac_caste), by = "gene") %>%
+  left_join(tbl(my_db, "H3K36me3") %>% collect() %>% mutate(H3K36me3_caste = caste_difference) %>% select(gene, H3K36me3_caste), by = "gene") %>%
   dplyr::select(-gene) 
   
 
@@ -1077,7 +1077,6 @@ merged <- merged %>% m.rename("k", "Connectivity in the\ntranscriptome")
 merged <- merged %>% m.rename("H3K4me3_caste", "Caste difference in\nH3K4me3 modification")
 merged <- merged %>% m.rename("H3K27ac_caste", "Caste difference in\nH3K27ac modification")
 merged <- merged %>% m.rename("H3K36me3_caste", "Caste difference in\nH3K36me3 modification")
-merged <- merged %>% m.rename("larva_caste", "Upregulation in queen-\ndestined larvae")
 
 entrez.tbl <- entrez.tbl %>% rename(gene = beebase2) %>% select(gene, entrez.id)
 
@@ -1102,24 +1101,20 @@ cor.matrix$label <- paste(format(round(cor.matrix$cor,2), nSmall =2), cor.matrix
 correlation.plot <- cor.matrix %>% 
   ggplot(aes(Var1, Var2, fill=cor)) + 
   geom_tile(colour = "grey10", size = 0.4, linetype = 3) + 
-  # scale_fill_gradient2(name = "Corr", 
-  #                      low = brewer.pal(9, "RdYlBu")[7], 
-  #                      mid = "white", 
-  #                      high = brewer.pal(9, "RdYlBu")[2]) +
   scale_fill_distiller(palette = "RdYlBu") + 
   geom_text(aes(label = label), colour = "grey25", size = 3.5) + 
   xlab(NULL) + ylab(NULL) +
-  scale_x_discrete(expand=c(0.01,0.01)) + scale_y_discrete(expand=c(0.01, 0.01)) + 
+  scale_x_discrete(expand=c(0.01,0.01)) + scale_y_discrete(expand = c(0.01, 0.01)) + 
   theme_minimal() + theme(axis.text.x = element_text(angle = 45, hjust = 1, 
-                                                     face = c(rep("plain", 2), "bold", rep("plain", 5), "bold",  rep("plain", 3))), 
-                          axis.text.y = element_text(face = c("bold", rep("plain", 2), "bold", rep("plain", 5), "bold",  rep("plain", 3))), 
+                                                     face = c("plain", "bold", rep("plain", 5), "bold",  rep("plain", 4))), 
+                          axis.text.y = element_text(face = c("bold", "plain", "bold", rep("plain", 5), "bold",  "plain", "plain")), 
                           panel.grid = element_blank(), 
                           legend.position = "none") 
-ggsave(correlation.plot, file = "figures/Figure 4 - correlations.pdf", width =9, height = 9)
+ggsave(correlation.plot, file = "figures/Figure 5 - correlations.pdf", width = 8, height = 8)
 correlation.plot
 ```
  <br/><br/> 
-**Figure 4**: Correlations across genes between various parameters, for _Apis mellifera_. 'Pheromone sensitivity' was calculated as the absolute value of the Log$_2$ fold difference in expression between pheromone treatment and the control. The Log FC (fold change) data come from Grozinger et al. 2007 (Mol. Ecol.), and positive values denote genes that have higher expression in queens or fertile workers, relative to sterile workers. Codon usage bias was estimated by the codon adaptation index: high values indicate bias for particular synonymous codons. DNA methylation rate was estimated either by the frequency of CpGs (i.e. -log CpG O/E ratio), or from bisulphite sequencing (BiS-seq). The parameter gamma ($\gamma$) describes the form of selection, where positive values denote positive selection, and negative values purifying selection (data from Hunt et al. 2014). Lastly, the expression level was calculated from our own dataset as the log transcripts per million, averaged across our 6 _Apis_ libraries.
+**Figure 5**: Spearman correlations for various gene-level measurements from the present study and earlier research, for _Apis mellifera_ (measurements from the present study are shown in bold). 'Pheromone sensitivity' was calculated as the absolute value of the Log$_2$ fold difference in expression between pheromone treatment and the control. Expression level shows the logarithm of the average across our 6 _Apis_ libraries. For the 'Upregulation in queens/fertile workers' data (Grozinger et al. 2007), positive values denote genes that have higher expression in queens or fertile workers, relative to sterile workers. For the three histone modification variables (Wojciechowski et al. 2018), high values indicate that the modification is more abundant in queen-destined larvae, and low values indicate it is more abundant in worker-destined larvae. The two DNA methylation variables give two different measures of the amount of gene body DNA methylation, namely an indirect measure (-log CpG O/E ratio) and a direct measure (BiS-seq, Galbraith et al. 2016). Codon usage bias was estimated using the codon adaptation index: high values indicate bias for particular synonymous codons. Lastly, the parameter gamma ($\gamma$) describes the form of selection, where positive values denote positive selection, and negative values purifying selection (data from Hunt et al. 2014). 
 
 
 ## Contrasting our _Lasius_ data with results from Morandin _et al._ 2016
@@ -1860,32 +1855,32 @@ module_GO_table <- make_module_GO_table()
 ```{r fig.height = 8, fig.width=9, message=FALSE, warning=FALSE, results='hide'}
 module_KEGG <- module_GO_table %>% filter(Test_type == "KEGG", Module %in% c("Module 1", "Module 4", "Module 9")) %>% 
    module_enrichment_plot(is.KEGG = TRUE)
-ggsave(module_KEGG, file = "figures/Figure 3 - module KEGG.pdf", height = 7, width = 8)
+ggsave(module_KEGG, file = "figures/Figure 4 - module KEGG.pdf", height = 7, width = 8)
 module_KEGG
 ```
 <br></br>
-**Figure 3**: Results of KEGG pathway enrichment analysis for the genes in each of the three significantly pheromone-sensitive modules identified by gene coexpression network analysis. The gene universe was defined as all genes for which we found an ortholog in all four species (i.e. the set that was used to discover these co-expressed modules). All KEGG terms shown in green were significantly enriched (p < 0.05), and those shown in purple remained significant after correction for multiple testing. Fold enrichment was calculated as the proportion of genes associated with the focal KEGG term in the module, divided by the equivalent proportion in the gene universe.
+**Figure 4**: Results of KEGG pathway enrichment analysis for the genes in each of the three significantly pheromone-sensitive transcriptional modules. The gene universe was defined as all genes for which we found an ortholog in all four species (i.e. the set that was used to discover these co-expressed modules). All KEGG terms shown in green were significantly enriched (p < 0.05), and those shown in purple remained significant after correction for multiple testing. Fold enrichment was calculated as the proportion of genes associated with the focal KEGG term in the module, divided by the equivalent proportion in the gene universe.
 
 #### GO BP
 ```{r fig.height = 8, fig.width=9, message=FALSE, warning=FALSE, results='hide'}
 module_GO_table %>% filter(Test_type == "GO: Biological process", Module %in% c("Module 1", "Module 4", "Module 9")) %>% module_enrichment_plot()  
 ```
 <br></br>
-**Figure S`r numbering("supp.figure.counter")`**: Comparable figure to Figure 3, showing the results of GO:  Biological process enrichment analysis instead of KEGG pathways. 
+**Figure S`r numbering("supp.figure.counter")`**: Comparable figure to Figure 4, showing the results of GO: Biological process enrichment analysis instead of KEGG pathways. 
 
 #### GO MF
 ```{r fig.height = 8, fig.width=9, message=FALSE, warning=FALSE, results='hide'}
 module_GO_table %>% filter(Test_type == "GO: Molecular function", Module %in% c("Module 1", "Module 4", "Module 9")) %>% module_enrichment_plot()  
 ```
 <br></br>
-**Figure S`r numbering("supp.figure.counter")`**: Comparable figure to Figure 3, showing the results of GO: Molecular function enrichment analysis instead of KEGG pathways. 
+**Figure S`r numbering("supp.figure.counter")`**: Comparable figure to Figure 4, showing the results of GO: Molecular function enrichment analysis instead of KEGG pathways. 
 
 #### GO CC
 ```{r fig.height = 8, fig.width=9, message=FALSE, warning=FALSE, results='hide'}
 module_GO_table %>% filter(Test_type == "GO: Cellular component", Module %in% c("Module 1", "Module 4", "Module 9")) %>% module_enrichment_plot()  
 ```
 <br></br>
-**Figure S`r numbering("supp.figure.counter")`**: Comparable figure to Figure 3, showing the results of GO: Cellular component enrichment analysis instead of KEGG pathways. 
+**Figure S`r numbering("supp.figure.counter")`**: Comparable figure to Figure 4, showing the results of GO: Cellular component enrichment analysis instead of KEGG pathways. Module 9 is missing because no GO:CC terms were significantly enriched.
 
 ### Table of all module enrichment results
 
@@ -1969,5 +1964,9 @@ module_gene_list(9)
 This section shows the operating system and R packages used to produce this document. 
 ```{r}
 sessionInfo() %>% pander()
+```
+
+```{r echo=FALSE, results="hide"}
+unlink("blockwiseTOM-block.1.RData")
 ```
 
