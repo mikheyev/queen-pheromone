@@ -1,3 +1,6 @@
+## Click [here](https://mikheyev.github.io/queen-pheromone) to view the HTML report
+
+
 ## Main .Rmd file
 All of our R statistical analyses are described in the `queen_pheromone.Rmd` file, which can be used to recreate all the figures, tables and analyses presented in the paper and supplementary material. To reproduce our analysis, clone this Github repository, open the .Rmd file, install all the R packages you don't already have, and then Run All or press the "knit" button in R studio.
 
