@@ -437,15 +437,17 @@ pander(overlap.p.values, split.cell = 40, split.table = Inf)
 ```{r results = "hide", warning=FALSE}
 most.pheromone.sensitive.genes <- function(){
   ngenes.list <- (1:5)*100 # 100 - 500
-  dat <- list()
-  for(i in 1: length(ngenes.list)){
+  
+  overlapping_genes <- list()
+  permutation_results <- list()
+  for(i in 1:length(ngenes.list)){
     ngenes <- ngenes.list[i]
     
     # Get the top n genes from Apis, as ranked by the absolute value for the log-fold change in response to pheromone
     g1 <- tbl(my_db, "ebseq_gene_am") %>% collect() %>% 
       dplyr::select(gene, PostFC) %>% 
       mutate(PostFC = log2(PostFC)) %>% left_join(tbl(my_db, "bee_names"), copy=TRUE, by = "gene") %>% 
-      arrange(-abs(PostFC)) %>% head(ngenes) %>% .$name %>% unique()
+      arrange(-abs(PostFC)) 
     
     # Do the same for genes from non-Apis species, and get the Apis names for the top BLAST hits in the Apis genome
     g2 <- tbl(my_db, "ebseq_gene_bt") %>% 
@@ -457,7 +459,7 @@ most.pheromone.sensitive.genes <- function(){
       arrange(-abs(PostFC)) %>% 
       rename(bt = gene, gene = am) %>% 
       left_join(tbl(my_db, "bee_names"), copy=TRUE, by = "gene") %>% 
-      filter(!is.na(name)) %>% head(ngenes) %>% .$name %>% unique()
+      filter(!is.na(name)) 
     
     g3 <- tbl(my_db, "ebseq_gene_lf") %>% 
       dplyr::select(gene, PostFC) %>% 
@@ -468,7 +470,7 @@ most.pheromone.sensitive.genes <- function(){
       arrange(-abs(PostFC)) %>% 
       rename(lf = gene, gene = am) %>% 
       left_join(tbl(my_db, "bee_names"), copy=TRUE, by = "gene") %>% 
-      filter(!is.na(name)) %>% head(ngenes) %>% .$name %>% unique()
+      filter(!is.na(name)) 
     
     g4 <-tbl(my_db, "ebseq_gene_ln") %>% 
       dplyr::select(gene, PostFC) %>% 
@@ -479,39 +481,98 @@ most.pheromone.sensitive.genes <- function(){
       arrange(-abs(PostFC)) %>% 
       rename(ln = gene, gene = am) %>% 
       left_join(tbl(my_db, "bee_names"), copy=TRUE, by = "gene") %>% 
-      filter(!is.na(name)) %>% head(ngenes) %>% .$name %>% unique()
+      filter(!is.na(name)) 
+    
+    get_top <- function(x, ngenes) {x %>% head(ngenes) %>% .$name %>% unique()}
     
     # Count the number of intersections, and find gene names that appear in 3 or 4 species using the venn() function
-    venn.diagram <- venn(list(am=g1, bt=g2, lf=g3, ln=g4), show.plot=FALSE) 
+    venn.diagram <- venn(list(am=(g1 %>% get_top(ngenes)), 
+                              bt=(g2 %>% get_top(ngenes)), 
+                              lf=(g3 %>% get_top(ngenes)), 
+                              ln=(g4 %>% get_top(ngenes))), show.plot=FALSE) 
     three.plus <- attr(venn.diagram, "intersections")[str_count(names(attr(venn.diagram, "intersections")), ":") > 1] %>% 
       unlist %>% unname %>% unique %>% sort
     four <- attr(venn.diagram, "intersections")[str_count(names(attr(venn.diagram, "intersections")), ":") > 2] %>% 
       unlist %>% unname %>% unique %>% sort
     three <- three.plus[!(three.plus %in% four)]
-    if(length(three) + length(four) > 0) dat[[i]] <- data.frame(Name = c(three, four), 
-                                                                count = c(rep("x3 species", length(three)), 
-                                                                          rep("4 species", length(four))), 
-                                                                nGenes = ngenes, stringsAsFactors = FALSE)
-  }
-  dat <- do.call("rbind", dat) %>%
+    if(length(three) + length(four) > 0) overlapping_genes[[i]] <- data.frame(Name = c(three, four), 
+                                                                              count = c(rep("x3 species", length(three)), 
+                                                                                        rep("4 species", length(four))), 
+                                                                              nGenes = ngenes, stringsAsFactors = FALSE)
+    
+    count_intersects <- function(l1, l2) {
+      
+      intersections <- attr(venn(list(am=l1 %>% get_top(ngenes), 
+                                      bt=l2 %>% get_top(ngenes)), 
+                                 show.plot=FALSE), "intersections")
+      if(length(intersections) > 2) return(length(intersections[[3]]))
+      else return(0)
+      
+    }
+    
+    # permutation test
+    num_overlaps <- c(count_intersects(g1,g2), count_intersects(g1,g3), count_intersects(g1,g4),
+                      count_intersects(g2,g3), count_intersects(g2,g4), count_intersects(g3,g4))
+    
+    nBoots <- 10000
+    boot_results <- lapply(1:nBoots, function(x){
+      g1 <- g1[sample(nrow(g1), nrow(g1)), ]
+      g2 <- g2[sample(nrow(g2), nrow(g2)), ]
+      g3 <- g3[sample(nrow(g3), nrow(g3)), ]
+      g4 <- g4[sample(nrow(g4), nrow(g4)), ]
+      
+      c(count_intersects(g1,g2), count_intersects(g1,g3), count_intersects(g1,g4),
+        count_intersects(g2,g3), count_intersects(g2,g4), count_intersects(g3,g4))
+      
+    }) %>% do.call("rbind", .) 
+    
+    p <- 1:6
+    for(j in 1:6) p[j] <- sum(boot_results[,j] > num_overlaps[j]) / nBoots
+    
+    permutation_results[[i]] <- tibble(species_pair = c("am-bt", "am-lf", "am-ln", "bt-lf", "bt-ln", "lf-ln"),
+                                       top_n_genes = ngenes.list[i],
+                                       observed_overlaps = num_overlaps,
+                                       expected_overlaps = colMeans(boot_results),
+                                       `O/E` = observed_overlaps / expected_overlaps,
+                                       p = p,
+                                       x = ifelse(p < 0.05, "sig", " ")) %>% as.data.frame()
+  } # end of for()
+
+  permutation_results <- do.call("rbind", permutation_results)
+  names(permutation_results) <- c("Species pair", "Size of gene set", "Obs. overlaps", "Exp. overlaps", "O/E", "p-value", "")
+  
+  overlapping_genes <- do.call("rbind", overlapping_genes) %>%
     arrange(count, nGenes, Name) %>%
     distinct(paste(Name, count), .keep_all = TRUE) %>%
     dplyr::select(Name, count, nGenes) %>%
     mutate(count = replace(count, count == "x3 species", "3 species")) 
   
-  names(dat) <- c("Name", "Appears in", "Size of gene set")
-  dat
+  names(overlapping_genes) <- c("Name", "Appears in", "Size of gene set")
+  list(overlapping_genes, permutation_results)
 }
-most.pheromone.sensitive.genes <- most.pheromone.sensitive.genes()
+
+if(!("most.pheromone.sensitive.genes.rds" %in% list.files())){
+  most.pheromone.sensitive.genes <- most.pheromone.sensitive.genes()
+  saveRDS(most.pheromone.sensitive.genes, "most.pheromone.sensitive.genes.rds")
+} else {
+  most.pheromone.sensitive.genes <- readRDS("most.pheromone.sensitive.genes.rds") 
+}
 ```
 
 **Table S`r numbering("supp.table.counter")`**: List of genes that appear in the top _n_-most pheromone-sensitive genes for 3 or 4 species. To generate the table, we ranked genes by the absolute value of their log fold change in response to queen pheromone, then listed the gene names that appeared in 3-4 species. For non-_Apis_ species, we found the gene names by comparison with the _Apis_ genome by BLAST. This exercise was performed with _n_ = 100, 200 ... 500, and the third column lists the smallest _n_ for which the gene in question appeared (for example, the gene _protein takeout-like_ appeared for all 4 species when inspecting the top 200+ genes). 
 ```{r}
-kable(most.pheromone.sensitive.genes, "html") %>%
+kable(most.pheromone.sensitive.genes[[1]], "html") %>%
   kable_styling() %>%
   scroll_box(height = "300px")
 ```
 
+<br></br>
+**Table S`r numbering("supp.table.counter")`**: Results of a permutation test examining the number of overlaps in the top _n_-most pheromone-sensitive genes for each pair of species. To generate the table, we ranked genes by the absolute value of their log fold change in response to queen pheromone, then took the top _n_-most pheromone-sensitive genes for each species, and counted the observed and expected number of overlaps (the expected number was estimated by bootstrapping with 10^5 replicates). The O/E column gives the ratio of observed to expected, where numbers >1 indicate more overlap than expected. The one-tailed p-value was estimated as the proportion of bootstrap replicates showing more overlap than in the real dataset. This exercise was performed with _n_ = 100, 200 ... 500.
+```{r}
+kable(most.pheromone.sensitive.genes[[2]], "html", digits=2) %>%
+  kable_styling() %>%
+  scroll_box(height = "300px")
+```
 
 
 
@@ -902,7 +963,7 @@ ggsave(eigen.data %>% treatments.network.plot(),
 
 
 ### Run multivariate Bayesian model testing for treatment and species effects on eigengenes
-Since the computation time is long, the model was defined and run in a separate R script, `Script to run multivariate brms model.R`. It is a multivariate model with 9 response variables: the eigengenes of the nine modules. We fit colony origin as a random effect in all models, accounting for similarity in gene expression between workers from the same colony. As shown in Table S13, we ran five models of this form, with different fixed effects (i.e. models with and without the predictors _Species_, _Treatment_, and their interaction). We then calculated the posterior model probabilities for these five models using bridge sampling (which is conceptually similar to pickoing the best-fitting model by AIC). These probabilities give the chance that each model is the best-fitting one in the set being considered, given the data and the priors. The table shows that a model containing the treatment effect, but not the species effect, is the best fitting (posterior probability > 0.99), and so we conclude that pheromone treatment affects gene expression, but we have no evidence for inter-species differences, or a treatment-by-species interaction.
+Since the computation time is long, the model was defined and run in a separate R script, `Script to run multivariate brms model.R`. It is a multivariate model with 9 response variables: the eigengenes of the nine modules. We fit colony origin as a random effect in all models, accounting for similarity in gene expression between workers from the same colony. As shown in Table S14, we ran five models of this form, with different fixed effects (i.e. models with and without the predictors _Species_, _Treatment_, and their interaction). We then calculated the posterior model probabilities for these five models using bridge sampling (which is conceptually similar to pickoing the best-fitting model by AIC). These probabilities give the chance that each model is the best-fitting one in the set being considered, given the data and the priors. The table shows that a model containing the treatment effect, but not the species effect, is the best fitting (posterior probability > 0.99), and so we conclude that pheromone treatment affects gene expression, but we have no evidence for inter-species differences, or a treatment-by-species interaction.
 
 **Table S`r numbering("supp.table.counter")`**: The posterior model probabilities of five competing multivariate Bayesian models of the module eigengene dataset. The best-fitting model (with posterior probability of almost 1) contains the treatment effect only (not the species effect, or the treatment-by-species interaction).
 ```{r}
